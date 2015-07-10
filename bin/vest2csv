@@ -1,0 +1,17 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Convert an FSL VEST file into a CSV file."
+print ""
+print "Usage:"
+print "vest2csv vestfile.mat > csvfile.csv"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "FMRIB / Univ. of Oxford"
+print "Jan/2014"
+print "http://brainder.org"
+exit }
+OFS="," }
+/\/Matrix/ { matr = NR }
+( matr != "" && NR > matr ) { $1=$1 ; print $0 }

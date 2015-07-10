@@ -1,0 +1,209 @@
+#!/usr/bin/octave -q
+% function imputedpx(varargin)
+% Impute values for missing vertices or faces of a
+% DPX (DPV or DPF) file. The vertices or faces that
+% contain the value 'missval' receive a new value
+% defined by the 'method'.
+%
+% Usage:
+% imputedpx(dpxin,missval,dpxout,method,srffile)
+%
+% - dpxin    : DPV/DPF file to have values imputed.
+% - missval  : Value that will be considered as
+%              'missing' and will be imputed. Typically
+%              this will be a NaN, but it can also
+%              be zero, or any other number.
+% - dpxout   : DPV/DPF file to be created with imputed
+%              values.
+% - method   : Imputation method. Can be:
+%              'average'   : Average of the immediate
+%                            neighbours (default).
+%              'neighbour' : Random neighbour. Uses the value
+%                            of one of the neighbours.
+%              'hot-deck'  : Picks a random value from
+%                            anywhere in the DPX file, with
+%                            no regard for neighbourhood.
+% - srffile  : For the 'average' and 'neighbour' methods.
+%              This is the surface file (*.srf) that will
+%              be used as reference to identify the
+%              neighbours.
+% - maskfile : Only vertices/faces within the mask are
+%              considered. The mask should be binary (0-1).
+%
+% _____________________________________
+% Anderson M. Winkler
+% Yale University
+% Apr/2012
+
+% Do OCTAVE stuff, using TRY to ensure MATLAB compatibility
+try
+    % Get the inputs
+    varargin = argv();
+    
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+    
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Impute values for missing vertices or faces of a\n');
+        fprintf('DPX (DPV or DPF) file. The vertices or faces that\n');
+        fprintf('contain the value ''missval'' receive a new value\n');
+        fprintf('defined by the ''method''.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('imputedpx <dpxin> <missval> <dpxout> [method] [srffile]\n');
+        fprintf('\n');
+        fprintf('- dpxin    : DPV/DPF file to have values imputed.\n');
+        fprintf('- missval  : Value that will be considered as\n');
+        fprintf('             ''missing'' and will be imputed. Typically\n');
+        fprintf('             this will be a NaN, but it can also\n');
+        fprintf('             be zero, or any other number.\n');
+        fprintf('- dpxout   : DPV/DPF file to be created with imputed\n');
+        fprintf('             values.\n');
+        fprintf('- method   : Imputation method. Can be:\n');
+        fprintf('             ''average''   : Average of the immediate\n');
+        fprintf('                           neighbours (default).\n');
+        fprintf('             ''neighbour'' : Random neighbour. Uses the value\n');
+        fprintf('                           of one of the neighbours.\n');
+        fprintf('             ''hot-deck''  : Picks a random value from\n');
+        fprintf('                           anywhere in the DPX file, with\n');
+        fprintf('                           no regard for neighbourhood.\n');
+        fprintf('- srffile  : For the ''average'' and ''neighbour'' methods.\n');
+        fprintf('             This is the surface file (*.srf) that will\n');
+        fprintf('             be used as reference to identify the\n');
+        fprintf('             neighbours.\n');
+        fprintf('- maskfile : Only vertices/faces within the mask are\n');
+        fprintf('             considered. The mask should be binary (0-1).\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('Yale University\n');
+        fprintf('Apr/2012\n');
+        return;
+    end
+end
+
+% Defaults
+d.dpxin    = '';
+d.missval  = NaN;
+d.dpxout   = '';
+d.method   = 'average';
+d.srffile  = '';
+d.maskfile = '';
+
+% Accept arguments
+vr = d;
+fields = fieldnames(vr);
+nargin = numel(varargin);
+for a = 1:nargin,
+    vr.(fields{a}) = varargin{a};
+end
+if ischar(vr.missval), vr.missval = str2num(vr.missval); end
+
+% Read DPX and mask files
+[dpx,crd,idx] = dpxread(vr.dpxin);
+if ~ isempty(vr.maskfile),
+    msk = logical(dpxread(vr.maskfile));
+else
+    msk = true(size(dpx));
+end
+if numel(dpx) ~= numel(msk),
+    error('Mask has to be of the same size as the DPX file.');
+else
+    dpxm  = dpx(msk);  % mask data
+end
+dpxi = dpx; % for the imputation
+
+% Index and number of missing values
+if isnan(vr.missval),
+    imiss = isnan(dpx) & msk;
+elseif isinf(vr.missval),
+    imiss = isinf(dpx) & msk;
+else
+    imiss = (dpx == vr.missval) & msk;
+end
+nmiss = sum(imiss)
+
+% Switch methods
+if strcmpi(vr.method,'hot-deck'),
+    fprintf('Performing hot-deck imputation\n');
+    
+    % Available data that can be used for imputation
+    avail = dpxm(dpxm ~= vr.missval);
+    
+    % Random indices for replacement
+    irepl = ceil(rand(nmiss,1)*numel(avail));
+    
+    % Impute!
+    dpxi(imiss) = avail(irepl);
+    
+else
+    fprintf('Performing imputation based on %s\n',vr.method);
+    
+    % Read surface file
+    [vtx,fac] = srfread(vr.srffile);
+    nX = numel(dpx);
+    nV = size(vtx,1);
+    nF = size(fac,1);
+    idx0 = (1:nX)';  % to be used as index
+    idxm = idx0(imiss);
+    
+    % Verify if this is facewise or vertexwise data
+    if nX == nV,
+        fprintf('Working with vertexwise data.\n');
+        
+        % For each missing vertex
+        for v = 1:nmiss,
+            
+            tmp = fac(any(fac == idxm(v)-1,2),:); % faces that contain this vertex
+            neivtx = unique(tmp(:));              % neighbouring vertices
+            neivtx(neivtx == (idxm(v)-1)) = [];   % remove current vertex
+            neimsk = false(size(dpx));            % mask for neighbouring vertices
+            neimsk(neivtx) = true;                % mark neighbouring vertices
+            neimsk = neimsk & msk & ~ imiss;      % drop vtx missing from neighbours
+            
+            % Replace the missing value
+            if strcmpi(vr.method,'average'),
+                dpxi(idxm(v)) = mean(dpx(neimsk));
+            elseif strcmpi(vr.method,'neighbour'),
+                [~,itmp] = sort(rand(sum(neimsk),1));
+                tmp = dpx(neimsk);
+                tmp = tmp(itmp);
+                dpxi(idxm(v)) = tmp(1);
+            else
+                error('Unknown method.')
+            end
+        end
+        
+    elseif nX == nF,
+        fprintf('Working with facewise data.\n');
+        
+        % For each missing face
+        for f = 1:nmiss,
+            tmp = ...  % number of common vtx between this f and others
+                fac == fac(idxm(f),1) | ...
+                fac == fac(idxm(f),2) | ...
+                fac == fac(idxm(f),3);
+            neimsk = sum(tmp,2) == 2;        % only 2 shared vertices, not 1 or 3
+            neimsk = neimsk & msk & ~ imiss; % drop fac missing from neighbours
+            
+            % Replace the missing value
+            if strcmpi(vr.method,'average'),
+                dpxm(idxm(f)) = mean(dpx(neimsk));
+            elseif strcmpi(vr.method,'neighbor'),
+                [~,itmp] = sort(rand(sum(neimsk),1));
+                tmp = dpx(neimsk);
+                tmp = tmp(itmp);
+                dpxi(idxm(f)) = tmp(1);
+            else
+                error('Unknown method.')
+            end
+        end
+        
+    else
+        error('The data does not match the surface.');
+    end
+end
+
+% Save to the disk
+dpxwrite(vr.dpxout,dpxi,crd,idx);

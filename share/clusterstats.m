@@ -1,0 +1,137 @@
+% #!/usr/bin/octave -q
+function clusterstats(varargin)
+% Extract the sum or mean for the vertices or faces
+% of a DPX file, masked by a DPX file that defines
+% clusters.
+% 
+% Usage:
+% clusterstats(clusterfile,dpxfile,meas,measout,sizeout);
+% 
+% clusterfile : File that determines the clusters.
+% dpxfile     : DPV or DPF file from which statistics
+%               will be computed.
+% meas        : Measurement to report: 'sum' or 'mean'
+% measout     : Line containing the means or averages for each
+%               region, separated by a comma
+% sizeout     : File with sizes of each cluster (i.e., number
+%               of faces or vertices for DPF or DPV respectively)
+% 
+% Obs: The first number in the output is the global (sum or mean)
+%      of all clusters in the mask.
+%
+% _____________________________________
+% Anderson M. Winkler
+% FMRIB / Univ. of Oxford
+% Feb/2012
+% http://brainder.org
+
+% Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
+try
+    % Get the inputs
+    varargin = argv();
+    
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+    
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Extract the sum or mean for the vertices or faces\n');
+        fprintf('of a DPX file, masked by a DPX file that defines\n');
+        fprintf('clusters.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('clusterstats <clusterfile> <dpxfile> <meas> <measout> <sizeout>\n');
+        fprintf('\n');
+        fprintf('clusterfile : File that determines the clusters.\n');
+        fprintf('dpxfile     : DPV or DPF file from which statistics\n');
+        fprintf('              will be computed.\n');
+        fprintf('meas        : Measurement to report: ''sum'' or ''mean''\n');
+        fprintf('measout     : Line containing the means or averages for each\n');
+        fprintf('              region, separated by a comma\n');
+        fprintf('sizeout     : File with sizes of each cluster (i.e., number\n');
+        fprintf('              of faces or vertices for DPF or DPV respectively)\n');
+        fprintf('\n');
+        fprintf('Obs: The first number in the output is the global (sum or mean)\n');
+        fprintf('     of all clusters in the mask.\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('FMRIB / Univ. of Oxford\n');
+        fprintf('Feb/2012\n');
+        fprintf('http://brainder.org\n');
+        fprintf('\n');
+        return;
+    end
+end
+
+% Defaults
+d.dpxfile = [];     % arg 2
+d.meas    = 'mean'; % arg 3
+d.measout = 1;      % arg 4
+d.sizeout = 1;      % arg 5
+
+% Accept arguments
+nargin = numel(varargin);
+if nargin > 5,
+    error('Invalid number of arguments')
+end
+v = struct(             ...
+    'clusterfile', [],  ...  % arg 1
+    'dpxfile',     [],  ...  % arg 2
+    'meas',        [],  ...  % arg 3
+    'measout',     [],  ...  % arg 4
+    'sizeout',     []);      % arg 5
+fields = fieldnames(v);
+for a = 1:nargin,
+    v.(fields{a}) = varargin{a};
+end
+
+% Accept some defaults if needed
+for a = 2:5,
+    if isempty(v.(fields{a})),
+        v.(fields{a}) = d.(fields{a});
+    end
+end
+
+% Read input files
+if ~ isempty(v.dpxfile),
+    dpx = dpxread(v.dpxfile);
+end
+clu = dpxread(v.clusterfile);
+nC  = max(clu);
+
+% Compute the stats
+s = zeros(nC+1,1);   m = s;
+for c = 0:nC;
+    if c == 0,
+        mask = clu >= c;
+    else
+        mask = clu == c;
+    end
+    s(c+1) = sum(mask);
+    if ~ isempty(v.dpxfile),
+        m(c+1) = eval(sprintf('%s(dpx(mask));',v.meas));
+    end
+end
+
+% Format strings
+sstr    = sprintf(',%g',s);
+sstr(1) = [];
+sstr    = [sstr '\n'];
+mstr    = sprintf(',%g',m);
+mstr(1) = [];
+mstr    = [mstr '\n'];
+
+% Save results
+if ischar(v.sizeout),
+    fid = fopen(v.sizeout,'a');
+    fprintf(fid,sstr);
+    fclose(fid);
+else
+    fprintf(sstr);
+end
+if ~ isempty(v.dpxfile) && ischar(v.measout),
+    fid = fopen(v.measout,'a');
+    fprintf(fid,mstr);
+    fclose(fid);
+end

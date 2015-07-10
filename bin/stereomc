@@ -1,0 +1,115 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Linearly aligns a number of images to a target and
+computes the average.
+
+Usage:
+stereomc -i image1.nii.gz -i image2.nii.gz -i ... \\
+         -t target.nii.gz -o outputimage.nii.gz -k
+
+Options:
+-i <image list> : Input images (at least 2).
+-t <target>     : Target for registration. It can be one
+                  of the inputs or another image.
+-o <output>     : Output image, the average of all.
+-k              : If specified, keep the *.mat files
+                  that describe the affine transforms
+                  to the target.
+
+Requirements:
+The FSL tools must be installed and configured. FSL can
+be downloaded from http://fmrib.ox.ac.uk/fsl
+
+Reference:
+Kochunov P et al. Retrospective motion correction
+protocol for high-resolution anatomical MRI.
+Hum Brain Mapp. 2006 Dec;27(12):957-62.
+
+________________________________________
+Anderson Winkler & Margaret Brumbaugh
+Institute of Living / Yale University
+August/2010 (first version)
+May/2012 (this version)
+EOU
+exit
+fi
+
+# Check for FSL
+if [ "${FSLDIR}" == "" ] ; then
+   echo "FSL not found. Please, configure FSLDIR variable correctly."
+   exit 1 ;
+fi
+
+# Accept inputs
+IMG_LIST=""
+KEEPMAT=0
+while getopts 'i:t:o:k' OPTION
+do
+  case ${OPTION} in
+    i) IMG_LIST="${IMG_LIST} ${OPTARG}" ;;
+    t) TARGET=${OPTARG} ;;
+    o) OUTPUT=${OPTARG} ;;
+    k) KEEPMAT=1 ;;
+  esac
+done
+
+# Prepare a random string to save temporary files
+RND0=$(echo "$(date) ${IN} ${THR}" | md5 )
+RNDSTR=${RND0:0:12}
+
+# Define a function for Ctrl+C as soon as the RNDSTR is defined
+trap bashtrap INT
+bashtrap()
+{
+   break
+   rm -rf *_tmp_${RNDSTR}*
+   exit 1
+}
+
+# Print in the inputs in the screen:
+echo "Input images: ${IMG_LIST}"
+echo "Target image:  ${TARGET}"
+echo "Average image: ${OUTPUT}"
+
+# When parsing just 1 input, copy to the output.
+if [ $(echo ${IMG_LIST}| wc -w) -eq 1 ] ; then
+   imcp ${IMG_LIST} ${OUTPUT}
+   exit 0
+fi
+
+# Linear alignment to the target
+mclist=""
+for i in ${IMG_LIST} ; do
+   echo "Aligning image ${i}"
+   o=$(imglob ${i})_tmp_${RNDSTR}
+   mclist="${mclist} ${o}"
+   ${FSLDIR}/bin/flirt -in ${i} -ref ${TARGET} -out ${o} -omat ${o}.mat -dof 6 -interp sinc
+done
+
+# Concatenation of the aligned images
+echo "Creating temporary 4D file"
+tmp4dfile="4d_tmp_${RNDSTR}"
+${FSLDIR}/bin/fslmerge -t ${tmp4dfile} ${mclist}
+
+# Average of the aligned images
+echo "Averaging"
+${FSLDIR}/bin/fslmaths ${tmp4dfile} -Tmean ${OUTPUT}
+
+# Either rename or get rid of the .mat files
+if [ ${KEEPMAT} == "1" ] ; then
+   for i in ${IMG_LIST} ; do
+      o=$(${FSLDIR}/bin/imglob ${i})_tmp_${RNDSTR}
+      mv ${o}.mat ${i}.mat
+   done
+else
+   rm -f ${o}.mat
+fi
+
+# Delete temp files
+echo "Removing temporary files"
+imrm ${tmp4dfile} ${mclist}
+echo "Done!"
+exit

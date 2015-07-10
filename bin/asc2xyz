@@ -1,0 +1,30 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Extract the XYZ coordinates from a DPV, DPF or"
+print "surface ASCII file and output in CSV format."
+print ""
+print "Usage:"
+print "asc2xyz <input.asc>  >  <output.csv>"
+print ""
+print "The output goes to stdout. Use > to redirect to"
+print "a file, as shown above"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "Yale University / Institute of Living"
+print "Jan/2011"
+exit } }
+
+# Set the output separator
+BEGIN { OFS="," }
+
+# Get the first field of the first register and use as idenfier
+NR == 1 { idfile=$1 }
+
+# If the input is Curvature
+idfile == 0 { print $2,$3,$4 }
+
+# If the input is Surface
+idfile == "#!ascii" && NR==2 { nV=$1 }
+idfile == "#!ascii" && NR>=3 && NR<=nV+2 { print $1,$2,$3 }

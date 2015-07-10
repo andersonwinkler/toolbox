@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Generate a surface for a TBSS skeleton.
+
+Usage:
+sub2srf -s <skeleton> -f <mean_FA> -o <output> [-d]
+
+Options:
+-s <skeleton> : TBSS skeleton.
+-f <mean_FA>  : Mean FA map used to generate the skeleton.
+-o <output>   : Output filename, without extension (it will be .srf).
+                This option can be prefixed by the path.
+-d            : Debug mode. Leave all temporary files.
+
+Requirements:
+FreeSurfer and FSL must have been configured and the variables
+FREESURFER_HOME and FSLDIR must have been correctly set.
+
+_____________________________________
+Anderson M. Winkler
+FMRIB / University of Oxford
+Feb/2014
+http://brainder.org
+EOU
+exit
+fi
+
+# Some defaults
+THRFILL=.1
+THRSIZE=60
+SMOITER=7
+
+if [[ ${FREESURFER_HOME} == "" ]] ; then
+  echo "Error: FreeSurfer not found. Make sure that the \${FREESURFER_HOME}"
+  echo "       variable has been correctly set."
+  exit 1
+fi
+if [[ ${FSLDIR} == "" ]] ; then
+  echo "Error: FSL not found. Make sure that the \${FSLDIR} variable"
+  echo "       has been correctly set."
+  exit 1
+fi
+
+# Check and accept arguments
+SKEL=""
+FAMAP=""
+OUT=""
+DEBUG=N
+while getopts 's:f:o:d' OPTION
+do
+  case ${OPTION} in
+    s) SKEL=${OPTARG} ;;
+    f) FAMAP=${OPTARG} ;;
+    o) OUT=${OPTARG} ;;
+    d) DEBUG=Y ;;
+  esac
+done
+
+# Prepare a random string to save temporary files
+if hash md5 2> /dev/null ; then
+  RND0=$(head -n 1 /dev/random | md5)
+elif hash md5sum 2> /dev/null ; then
+  RND0=$(head -n 1 /dev/random | md5sum)
+fi
+RNDSTR=${RND0:0:12}
+
+# Define a function for Ctrl+C as soon as the RNDSTR is defined
+trap cleanup INT
+function cleanup {
+  rm -rf ${OUT}_${RNDSTR}_*
+  export FSLOUTPUTTYPE=${ORIGTYPE}
+  exit 1
+}
+
+# Sort out the correct extensions in FSL
+ORIGTYPE=${FSLOUTPUTTYPE}
+export FSLOUTPUTTYPE="NIFTI_GZ"
+SKEL=$(${FSLDIR}/bin/remove_ext ${SKEL})
+FAMAP=$(${FSLDIR}/bin/remove_ext ${FAMAP})
+OUT=$(${FSLDIR}/bin/remove_ext ${OUT})
+
+# Make a binary mask
+${FSLDIR}/bin/fslmaths ${SKEL} -bin ${OUT}_${RNDSTR}_03_mask
+
+# Thickens the mask a bit
+${FSLDIR}/bin/tbss_fill ${OUT}_${RNDSTR}_03_mask 0 ${FAMAP} ${OUT}_${RNDSTR}_04_fill
+
+# Remove tiny disconnected regions
+${FSLDIR}/bin/cluster --in=${OUT}_${RNDSTR}_04_fill --thresh=${THRFILL} \
+  --osize=${OUT}_${RNDSTR}_05_size > /dev/null
+${FSLDIR}/bin/fslmaths \
+  ${OUT}_${RNDSTR}_05_size -thr ${THRSIZE} -bin ${OUT}_${RNDSTR}_06_sizethr
+
+# Convert to MGH format
+${FREESURFER_HOME}/bin/mri_convert -it nii -ot mgz ${OUT}_${RNDSTR}_06_sizethr.nii.gz \
+  ${OUT}_${RNDSTR}_06b_sizethr.mgz  &> /dev/null
+${FREESURFER_HOME}/bin/mri_convert \
+  -it nii -ot mgz ${FAMAP}.nii.gz ${OUT}_${RNDSTR}_01b_mean_fa.mgz  &> /dev/null
+
+# Pre-tessellate
+${FREESURFER_HOME}/bin/mri_pretess ${OUT}_${RNDSTR}_06b_sizethr.mgz 1 \
+  ${OUT}_${RNDSTR}_01b_mean_fa.mgz ${OUT}_${RNDSTR}_07_filled.mgz  &> /dev/null
+
+# Tessellate
+${FREESURFER_HOME}/bin/mri_tessellate \
+  -n ${OUT}_${RNDSTR}_07_filled.mgz 1 ${OUT}_${RNDSTR}_08_tess &> /dev/null
+
+# Smooth
+${FREESURFER_HOME}/bin/mris_smooth \
+  -nw -n ${SMOITER} ${OUT}_${RNDSTR}_08_tess ${OUT}_${RNDSTR}_09_smooth &> /dev/null
+if [[ -e rh.${OUT}_${RNDSTR}_09_smooth ]] ; then
+  mv rh.${OUT}_${RNDSTR}_09_smooth ${OUT}_${RNDSTR}_09_smooth
+fi
+
+# Convert to ASCII
+${FREESURFER_HOME}/bin/mris_convert \
+  ${OUT}_${RNDSTR}_09_smooth ${OUT}_${RNDSTR}_09b_smooth.asc &> /dev/null
+if [[ -e rh.${OUT}_${RNDSTR}_09b_smooth.asc ]] ; then
+  mv rh.${OUT}_${RNDSTR}_09b_smooth.asc ${OUT}_${RNDSTR}_09b_smooth.asc
+fi
+mv ${OUT}_${RNDSTR}_09b_smooth.asc ${OUT}.srf
+
+# Remove temp files
+if [ "${DEBUG}" == "Y" ] ; then
+  echo "Temporary files not deleted. Their names contain the string ${RNDSTR}. "
+else
+  cleanup
+fi
+exit 0
+ 

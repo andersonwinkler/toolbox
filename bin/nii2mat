@@ -1,0 +1,19 @@
+#!/bin/sh
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Extracts the affine matrix from a NIFTI file. Requires FSL.
+
+Usage:
+nii2mat <input.nii> <output.mat>
+
+_____________________________________
+Anderson Winkler
+Yale University / Institute of Living
+Jun/2011
+EOU
+exit
+fi
+
+fslhd $1 | grep sto_xyz | awk '{print $2, $3, $4, $5}' > $2

@@ -1,0 +1,71 @@
+% #!/usr/bin/octave -q
+function dpxhist(varargin)
+% Generate a histogram for a combined set of DPV/DPF files,
+% ignoring NaN/Inf values. The result is saved to a PNG file.
+%
+% Usage:
+% dpxstats('histogram.png','file1.dpf','file2.dpf',...)
+%
+% _____________________________________
+% Anderson M. Winkler
+% Yale University / Institute of Living
+% Oct/2011
+
+% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
+try
+    % Get the inputs
+    varargin = argv();
+
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Generate a histogram for a combined set of DPV/DPF files,\n');
+        fprintf('ignoring NaN/Inf values. The result is saved to a PNG file.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('dpxstats <histogram.png> <file1.dpf> [file2.dpf] ...\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('Yale University / Institute of Living\n');
+        fprintf('Oct/2011\n');
+        return;
+    end
+end
+
+% Loop over images
+nargin = numel(varargin);
+dpx = [];
+for a = 2:nargin, % 1st cell contain the file name for the histogram
+    fprintf('Reading file %s\n',varargin{a});
+    dpx = [dpx ; crvread(varargin{a})];
+end
+
+% Number of datapoints (faces or vertices)
+nD    = numel(dpx);
+didx  = ~isnan(dpx) & ~isinf(dpx);
+nvoid = sum(~didx);
+
+% Print combined statistics
+fprintf('# of points: %d\n',nD);
+fprintf('# of points marked as NaN or Inf: %d (%d%%)\n',nvoid,100*nvoid/nD);
+fprintf('Mean:     %f\n',mean(dpx(didx)));
+fprintf('Std:      %f\n',std(dpx(didx)));
+fprintf('Min:      %f\n',min(dpx(didx)));
+fprintf('Max:      %f\n',max(dpx(didx)));
+fprintf('Median:   %f\n',median(dpx(didx)));
+fprintf('Mode:     %f\n',mode(dpx(didx)));
+fprintf('Sum:      %f\n\n',sum(dpx(didx)));
+
+% Make the histogram
+if ~isempty(varargin{1}),
+    f = figure('Visible','off');
+    hist(dpx(didx),100);
+    print('-dpng','-r100',varargin{1});
+    close(f);
+    fprintf('Histogram saved as %s\n',varargin{1});
+else
+    fprintf('Filename for the histogram not supplied, so it won''t be created.\n');
+end

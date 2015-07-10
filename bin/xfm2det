@@ -1,0 +1,29 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Compute the determinant of an affine transform"
+print "produced by FreeSurfer and stored in a .xfm file."
+print ""
+print "Example usage:"
+print "xfm2det <transform.xfm>"
+print ""
+print "The outputs are the determinant and its inverse."
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "Yale University / Institute of Living"
+print "Sep/2010"
+print "Based on an earlier code by Roberto Toro."
+exit } }
+
+# Get the matrix elements that matter
+NR == 6 { a=$1; b=$2; c=$3 }
+NR == 7 { d=$1; e=$2; f=$3 }
+NR == 8 { g=$1; h=$2; i=$3 }
+
+# Compute the determinant
+END { if (ARGV[1] != "") { 
+   det = a*e*i + d*h*c + g*b*f - c*e*g - f*h*a - i*b*d ;
+   printf("%f %f\n", det, 1/det)
+} }
+

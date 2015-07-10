@@ -1,0 +1,10 @@
+#!/usr/bin/awk -f
+
+BEGIN { FS=OFS="," }
+{ for (i = 1; i <= NF; i++) { a[i,NR] = $i }; m = NF; n = NR }
+END {
+for ( j = 1; j <= m; j++ )
+  for ( k = 1; k <= n ; k++)
+    printf( "%s%s", a[j,k], ( k == n ) ? "\n" : OFS )
+}
+

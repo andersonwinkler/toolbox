@@ -1,0 +1,25 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Convert a CSV file into an FSL VEST file."
+print ""
+print "Usage:"
+print "csv2vest csvfile.csv > vestfile.mat"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "FMRIB / Univ. of Oxford"
+print "Jan/2014"
+print "http://brainder.org"
+exit }
+FS="," ; OFS="\t" }
+{ for ( f = 1; f <= NF; f++ ) { a[NR,f] = $f }; nf = NF; nr = NR }
+END {
+if ( nf != "" && nr != "" ) {
+printf("/NumWaves %s\n", nf);
+printf("/NumPoints %s\n", nr);
+printf("/Matrix\n");
+for ( r = 1; r <= nr; r++ )
+  for ( f = 1; f <= nf ; f++ )
+    printf( "%s%s", a[r,f], ( f == nf ) ? "\n" : OFS )
+} }

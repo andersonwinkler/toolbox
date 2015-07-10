@@ -1,0 +1,148 @@
+function srf2vol(varargin)
+% Compute the volume per face or per vertex for a pair of ASCII surface
+% files and save as a DPV or DPF (aka curvature) file.
+%
+% Usage:
+% srf2vol(pialfile,whitefile,volfile,meas)
+%
+% - pialfile  = Input pial surface file, in ASCII format
+% - whitefile = Input white surface file, in ASCII format
+% - volfile   = Output file, as a DPV or DPF ASCII format. For 'dpv', the
+%               format is the conventional FreeSurfer's curvature file.
+%               For 'dpf' it contains face indices instead of vertex indices,
+%               and vertex indices instead of vertex coordinates.
+% - meas      = It can be either 'dpv' for volume per vertex or
+%               'dpf' for volume per face. The volume per vertex is simply
+%               the sum of the 'dpf' for all faces that meet at the vertex
+%               divided by 3. Use preferably 'dpf' for studies of volume
+%               between subjects. Default is 'dpf'.
+%
+% _____________________________________
+% Anderson M. Winkler
+% FMRIB / University of Oxford
+% May/2013
+% http://brainder.org
+
+% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
+try
+    % Get the inputs
+    varargin = argv();
+    
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+    
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        
+        fprintf('Compute the area per face or per vertex for an ASCII surface file and\n');
+        fprintf('save as a DPV or DPF (aka curvature) file.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('srf2vol <pialfile> <whitefile> <volfile> [meas]\n');
+        fprintf('\n');
+        fprintf('- pialfile  = Input pial surface file, in ASCII format\n');
+        fprintf('- whitefile = Input white surface file, in ASCII format\n');
+        fprintf('- volfile   = Output file, as a DPV or DPF ASCII format. For ''dpv'', the\n');
+        fprintf('             format is the conventional FreeSurfer''s curvature file.\n');
+        fprintf('             For ''dpf'' it contains face indices instead of vertex indices, \n');
+        fprintf('             and vertex indices instead of vertex coordinates.\n');
+        fprintf('- meas      = It can be either ''dpv'' for volume per vertex or\n');
+        fprintf('             ''dpf'' for volume per face. The volume per vertex is simply\n');
+        fprintf('             the sum of the ''dpf'' for all faces that meet at the vertex\n');
+        fprintf('             divided by 3. Use preferably ''dpf'' for studies of volume\n');
+        fprintf('             between subjects. Default is ''dpf''.\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('FMRIB / University of Oxford\n');
+        fprintf('May/2013\n');
+        fprintf('http://brainder.org\n');
+        return;
+    end
+end
+
+% Defaults
+d.fsrfp = [];
+d.fsrfw = [];
+d.fdpx = [];
+d.meas = 'dpf';
+
+% Accept user arguments
+fields = fieldnames(d);
+nargin = numel(varargin);
+for a = 1:nargin,
+    d.(fields{a}) = varargin{a};
+end
+
+% Read the pial surface file
+[vtxp,facp] = srfread(d.fsrfp);
+nVp = size(vtxp,1);
+nFp = size(facp,1);
+
+% Read the white surface file
+[vtxw,facw0] = srfread(d.fsrfw);
+nVw = size(vtxw,1);
+nFw = size(facw0,1);
+
+% Some sanity checks
+facp = sort(facp,2);
+facw = sort(facw0,2);
+tmp = facp ~= facw;
+if nVp ~= nVw || nFp ~= nFw || any(tmp(:)),
+    error('Pial and white surfaces have different geometric structure.')
+end
+clear tmp;
+
+% Vertex coordinates (ABC, for pial and white).
+% Use Ap as the origin (0,0,0)
+Ap = vtxp(facp(:,1),:);
+Bp = vtxp(facp(:,2),:) - Ap;
+Cp = vtxp(facp(:,3),:) - Ap;
+Aw = vtxw(facw(:,1),:) - Ap;
+Bw = vtxw(facw(:,2),:) - Ap;
+Cw = vtxw(facw(:,3),:) - Ap;
+
+% Each obliquely truncated trilateral pyramid can be split into
+% tree tetrahedra:
+% - T1: (Aw,Bw,Cw,Ap)
+% - T2: (Ap,Bp,Cp,Bw)
+% - T3: (Ap,Cp,Cw,Bw)
+% As the Ap is the common vertex for all three, it can be used as the origin.
+% The next lines compute the volume for each, using a scalar triple product:
+T1 = abs(dot(Aw,cross(Bw,Cw,2),2));
+T2 = abs(dot(Bp,cross(Cp,Bw,2),2));
+T3 = abs(dot(Cp,cross(Cw,Bw,2),2));
+
+% Add them up
+dpf = (T1 + T2 + T3)./6;
+fprintf('Total volume (facewise): %g\n',sum(dpf));
+
+if strcmpi(d.meas,'dpf')
+    
+    % Prepare DPF to save (use the original white surface indices)
+    tosave = [(0:nFp-1)' facw0 dpf ];
+    
+elseif strcmpi(d.meas,'dpv')
+    
+    % Compute volume per vertex (DPV)
+    dpv = zeros(nVw,1);
+    
+    % For speed, divide the dpf by 3.
+    dpf3 = dpf/3;
+    
+    % Redistribute
+    for f = 1:nFp,
+        dpv(facw0(f,:)) = dpv(facw0(f,:)) + dpf3(f);
+    end
+    fprintf('Total volume (vertexwise): %g\n',sum(dpv));
+    
+    % Prepare DPV to save
+    tosave = [(0:nVp-1)' vtxp dpv];
+end
+
+% Save the result as a DPV/DPF file
+if ~isempty(d.fdpx),
+    fid = fopen(d.fdpx,'w');
+    fprintf(fid,'%0.3d %g %g %g %0.16f\n',tosave');
+    fclose(fid);
+end

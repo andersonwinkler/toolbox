@@ -1,0 +1,103 @@
+% #!/usr/bin/octave -q
+function dpx2avg(varargin)
+% For a set of data-per-face (DPF) or data-per-vertex (DPV) files,
+% compute their average and standard deviation.
+% 
+% Usage
+% dpx2avg('file1.dpf','file2.dpf',...,'prefix')
+%     
+% All arguments except the last are files that will be read and
+% averaged together. The last argument is a prefix that will be used
+% to save the resulting mean and standard deviation. The prefix
+% string can include a path.
+% 
+% The output will be named as 'prefix.avg.dpf' and 'prefix.std.dpf'
+% if the first input have a .dpf extension, or 'prefix.avg.dpf' and
+% 'prefix.std.dpf' if the first input have a .dpv extension.
+% 
+% _____________________________________
+% Anderson M. Winkler
+% Yale University / Institute of Living
+% Jul/2011
+
+
+% Do OCTAVE stuff, using TRY to ensure MATLAB compatibility
+try
+    % Get the inputs
+    varargin = argv();
+
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+
+        fprintf('For a set of data-per-face (DPF) or data-per-vertex (DPV) files,\n');
+        fprintf('compute their average and standard deviation.\n');
+        fprintf('\n');
+        fprintf('Usage\n');
+        fprintf('dpx2avg <file1.dpf> <file2.dpf> ... <prefix>\n');
+        fprintf('\n');
+        fprintf('All arguments except the last are files that will be read and\n');
+        fprintf('averaged together. The last argument is a prefix that will be used\n');
+        fprintf('to save the resulting mean and standard deviation. The prefix\n');
+        fprintf('string can include a path.\n');
+        fprintf('\n');
+        fprintf('The output will be named as ''prefix.avg.dpf'' and ''prefix.std.dpf''\n');
+        fprintf('if the first input have a .dpf extension, or ''prefix.avg.dpf'' and\n');
+        fprintf('''prefix.std.dpf'' if the first input have a .dpv extension.\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('Yale University / Institute of Living\n');
+        fprintf('Jul/2011\n');
+        return;
+    end
+end
+
+% This is redundant in MATLAB, but fixes a certain issue in OCTAVE
+nargin = numel(varargin); 
+
+if nargin < 3.
+    error('Please, supply at least 3 arguments.\nFor lore, you can use ''rpncalc''.');
+end
+
+% Get the extension name
+[fpth,fnam,fext] = fileparts(varargin{1});
+
+% Open the files to save now, so if there is an error,
+% notify now, not after the averages are ready
+fidA = fopen(sprintf('%s.avg%s',varargin{nargin},fext),'w');
+fidS = fopen(sprintf('%s.std%s',varargin{nargin},fext),'w');
+
+% Loop over each argument (DPF or DPV files)
+for a = 1:nargin-1,
+
+    % Print some feedback in the screen
+    fprintf('Working on: %s\n',varargin{a});
+
+    % Read the curvature file
+    [crv,crd,idx] = crvread(varargin{a});
+
+    % Compute mean and sum of squares
+    if a == 1, % for the 1st subj, initialize vars
+        m   = crv;
+        ssq = zeros(size(m));
+    else % for the others, increment mean and ssq
+        m0   = m;
+        ssq0 = ssq;
+        [m,ssq] = issq(crv,a,m0,ssq0);
+    end
+end
+
+% Convert ssq to standard deviation
+sd = sqrt(ssq/(nargin-1));
+
+% Save the results (Mean and Std Dev)
+fprintf(fidA,'%0.3d %g %g %g %0.16f\n',[idx crd m]');
+fprintf(fidS,'%0.3d %g %g %g %0.16f\n',[idx crd sd]');
+
+% Close the files
+fclose(fidA); fclose(fidS);
+
+% That's it!

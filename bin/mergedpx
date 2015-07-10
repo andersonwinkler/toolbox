@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Convert multiple DPX files into a single CSV file that can be used,
+for instance, as the input for statistical analysis in PALM.
+
+Usage:
+mergedpx <output.csv> <dpxfile1.dpx> <dpxfile2.dpx> [...]
+
+_____________________________________
+Anderson M. Winkler
+FMRIB / University of Oxford
+Mar/2014
+http://brainder.org
+EOU
+exit
+fi
+
+i=1;
+for f in $@ ; do
+  if   [[ ${i} -eq 2 ]] ; then
+    echo "Working on file ${f}"
+    nX1=$(wc -l ${f} | awk '{print $1}')
+    cut -d " " -f 5 ${f} > ${1}
+  elif [[ ${i} -gt 2 ]] ; then
+    echo "Working on file ${f}"
+    nXf=$(wc -l ${f} | awk '{print $1}')
+    if [[ ${nX1} -ne ${nXf} ]] ; then
+      echo "Error: The input files must be all of the same size."
+      exit 1
+    fi
+    cut -d " " -f 5 ${f} | paste -d , ${1} - > ${1}_tmptmp
+    mv ${1}_tmptmp ${1}
+  fi
+  i=$(expr ${i} + 1)
+done
+

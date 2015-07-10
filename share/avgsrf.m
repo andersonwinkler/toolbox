@@ -1,0 +1,64 @@
+% #!/usr/bin/octave -q
+function avgsrf(varargin)
+% Compute an average surface file.
+% 
+% Usage:
+% avgsrf('average.srf','srf1.srf','srf2.srf',...,'srfN.srf');
+% 
+% _____________________________________
+% Anderson M. Winkler
+% FMRIB / University of Oxford
+% Aug/2014
+% http://brainder.org
+
+% OCTAVE stuff
+try %#ok
+    % Get the inputs
+    varargin = argv();
+    
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+    
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Compute an average surface file.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('avgsrf average.srf srf1.srf srf2.srf ... srfN.srf\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('FMRIB / University of Oxford\n');
+        fprintf('Aug/2014\n');
+        fprintf('http://brainder.org\n');
+        return;
+    end
+end
+
+% Number of input surfaces
+nargin = numel(varargin);
+N = nargin - 1;
+
+% For each input surface
+for n = 1:N,
+    
+    % Load the file
+    [vtx,fac] = srfread(varargin{n+1});
+    
+    % For the first, initialize the vertices
+    if n == 1,
+        vtxavg  = zeros(size(vtx));
+        facprev = fac;
+    end
+    
+    % Make sure the geometries match, otherwise the average is non-sensical
+    if any(facprev(:) ~= fac(:)),
+        error('At least two input surfaces do not have matching geometry:\n- %s\n-%s\n',varargin{n},varargin{n+1});
+    end
+    
+    % Do the actual averaging (incremental)
+    vtxavg = vtxavg + vtx./N;
+end
+
+% Save the result
+srfwrite(vtxavg,fac,varargin{1});

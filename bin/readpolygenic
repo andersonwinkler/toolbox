@@ -1,0 +1,54 @@
+#!/bin/gawk -f
+
+BEGIN {
+
+# If no arguments are given, print usage
+if (ARGV[1] == "") { 
+print "Read SOLAR polygenic.out files and prints the output"
+print "as a comma-separated values, that can be concatenated"
+print "into a single CSV file."
+print ""
+print "Usage:"
+print "readpolygenic polygenic.out  >  recordline.csv"
+print ""
+print "The output goes to stdout. Use > to redirect to"
+print "a file, as shown above"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "Yale University / Institute of Living"
+print "Aug/2011"
+print "http://brainder.org"
+exit }
+
+# Otherwise, change the output record separator to comma instead of newline
+else { ORS="," } }
+
+# Trait name
+/Trait:/ { print $2 }
+
+# Sample size
+/Individuals:/ { print $4 }
+
+# Heritability, its significance and std error
+/H2r\ is/ { print $3 ; print $6 ; if (getline > 0) { print $4 } }
+
+# Common environmental effect, its significance and std error
+/C2\ is/ { print $3 ; print $6 ; if (getline > 0) { print $4 } }
+
+# All covariates
+/p\ \=\ / { print $4 }
+
+# Proportion of variance due to covariates
+/Proportion\ of\ Variance\ Due\ to\ All\ Final\ Covariates\ Is/ { if (getline > 0) { print $1 } }
+
+# For quantitative traits there is no kurtosis info, then this is the last, comma
+# so remove the comma and put a new line
+/Kullback\-Leibler\ R\-squared\ is/ { k=$4 ; sub(/\,/, "", k) ; ORS="\n" ; print k }
+
+# Residual kurtosis. This should be the last information in the file, hence add a new line
+# Also, remove that annoying comma...
+#/Residual\ Kurtosis\ is/ { k=$4 ; sub(/\,/, "", k) ; ORS="\n" ; print k }
+/Residual\ Kurtosis\ is/ { w = $1 ; if ( w == "Warning!" ) k=$5 ; else k=$4 ; sub(/\,/, "", k) ; ORS="\n" ; print k }
+
+# That's it!

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Create a tarball to distribute PALM.
+
+Usage:
+palm_package -run
+
+To change paths, edit inside.
+
+_____________________________________
+Anderson M. Winkler
+FMRIB / Univ. of Oxford
+Jul/2015
+http://brainder.org
+EOU
+exit
+fi
+
+# Change below as needed.
+PALMPATH=/Users/winkler/toolbox/palm.git
+TEMPPATH=/tmp
+PUBLPATH=/Users/winkler/Dropbox/Public/outbox/palm/
+
+echo "Creating directory for the new package."
+ver=$(cat ${PALMPATH}/palm_version.txt | awk '{print $NF}' | awk -v "FS=)" '{print $1}')
+mkdir -p ${TEMPPATH}/palm-${ver}
+
+echo "Copying files."
+cp -rp ${PALMPATH}/* ${TEMPPATH}/palm-${ver}/
+
+echo "Packaging."
+gnutar czf ${TEMPPATH}/palm-${ver}.tar.gz -C${TEMPPATH} palm-${ver} --exclude=".*"
+
+echo "Copying to the public directory."
+mv -i ${TEMPPATH}/palm-${ver}.tar.gz ${PUBLPATH}
+
+echo "Copying to jalapeno."
+scp -r ${TEMPPATH}/palm-${ver} winkler@jalapeno.fmrib.ox.ac.uk:~/
+
+echo "Updating symlink."
+ssh winkler@jalapeno.fmrib.ox.ac.uk "ln -sf ~/palm-${ver} ~/palm"
+
+echo "Removing temporary files."
+rm -rf ${TEMPPATH}/palm-${ver}
+
+echo "Done."

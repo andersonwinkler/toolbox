@@ -1,0 +1,138 @@
+#!/usr/bin/octave -q
+% function dpxstats(varargin)
+% Display some statistics for a DPF or DPV file.
+% If more than one file is specified, and if all contain
+% the same number of datapoints, it prints also
+% the correlation matrix.
+% 
+% Usage:
+% dpxstats('file1.dpf','file2.dpf','file3.dpf',...)
+% 
+% If the option -t is given as the last argument, the
+% first part of the output is printed as a table (CSV).
+%
+% _____________________________________
+% Anderson M. Winkler
+% Yale University / Institute of Living
+% Jul/2011
+% http://brainder.org
+
+% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
+try %#ok
+    % Get the inputs
+    varargin = argv();
+    nargin = numel(varargin); %#ok
+
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Display some statistics for a DPF or DPV file.\n');
+        fprintf('If more than one file is specified, and if all contain\n');
+        fprintf('the same number of datapoints, it prints also\n');
+        fprintf('the correlation matrix.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('dpxstats <file1.dpf> [file2.dpf] [file3.dpf] ...\n');
+        fprintf('\n');
+        fprintf('If the option -t is given as the last argument, the\n');
+        fprintf('first part of the output is printed as a table (CSV).\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('Yale University / Institute of Living\n');
+        fprintf('Jul/2011\n');
+        fprintf('http://brainder.org\n');
+        return;
+    end
+end
+
+% Make sure this works on any Matlab version
+nargin = numel(varargin);
+if strcmp(varargin{nargin},'-t'),
+    showastable = true;
+    varargin = varargin(1:nargin-1);
+    nfiles = nargin - 1;
+else
+    showastable = false;
+    nfiles = nargin;
+end
+
+% Loop over images
+dpx   = cell(nfiles,1);
+nD    = zeros(nfiles,1);
+nvoid = zeros(nfiles,1);
+if showastable,
+    %fprintf('Filename,Npoints,Ninf&Nnan,%%Ninf&Nnan,mean,std,min,max,median,mode,sum\n')
+    for a = 1:nfiles,
+        
+        % Read the file
+        dpx{a} = dpxread(varargin{a});
+        
+        % Number of datapoints (faces or vertices)
+        nD(a)    = numel(dpx{a});
+        didx     = ~isnan(dpx{a}) & ~isinf(dpx{a});
+        nvoid(a) = sum(~didx);
+        
+        % Print statistics
+        fprintf('%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f\n',...
+            varargin{a},...
+            nD(a),...
+            nvoid(a),...
+            100*nvoid(a)/nD(a),...
+            mean(dpx{a}(didx)),...
+            std(dpx{a}(didx)),...
+            min(dpx{a}(didx)),...
+            max(dpx{a}(didx)),...
+            median(dpx{a}(didx)),...
+            mode(dpx{a}(didx)),...
+            sum(dpx{a}(didx)));
+    end
+else
+    for a = 1:nfiles,
+        
+        % Read the file
+        dpx{a} = dpxread(varargin{a});
+        
+        % Number of datapoints (faces or vertices)
+        nD(a)    = numel(dpx{a});
+        didx     = ~isnan(dpx{a}) & ~isinf(dpx{a});
+        nvoid(a) = sum(~didx);
+        
+        % Print statistics
+        fprintf('Filename: %s\n',varargin{a});
+        fprintf('# of points: %d\n',nD(a));
+        fprintf('# of points marked as NaN or Inf: %d (%d%%)\n',nvoid(a),100*nvoid(a)/nD(a));
+        fprintf('Mean:     %f\n',mean(dpx{a}(didx)));
+        fprintf('Std:      %f\n',std(dpx{a}(didx)));
+        fprintf('Min:      %f\n',min(dpx{a}(didx)));
+        fprintf('Max:      %f\n',max(dpx{a}(didx)));
+        fprintf('Median:   %f\n',median(dpx{a}(didx)));
+        fprintf('Mode:     %f\n',mode(dpx{a}(didx)));
+        fprintf('Sum:      %f\n\n',sum(dpx{a}(didx)));
+    end
+end
+
+% If the number of datapoints is the same for all
+if nfiles > 1,
+    if numel(unique(nD)) == 1 && numel(unique(nvoid)) == 1;
+        
+        % Initialize & assemble a matrix
+        dpxall = zeros(nD(1)-nvoid(1),nfiles);
+        for a = 1:nfiles,
+            didx = ~isnan(dpx{a}) & ~isinf(dpx{a});
+            dpxall(:,a) = dpx{a}(didx);
+        end
+        
+        % Compute & display the correlation matrix
+        C = corrcoef(dpxall);
+        disp('Correlation matrix:')
+        disp(C);
+    else
+        
+        % If unavailable...
+        fprintf('The number of datapoints is not the same for all files.\n');
+        fprintf('Correlation matrix won''t be shown.\n');
+    end
+end

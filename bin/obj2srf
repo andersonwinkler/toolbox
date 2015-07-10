@@ -1,0 +1,46 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Convert simple OBJ to Surface ASCII format."
+print "Only vertices and faces are converted, without" 
+print "normals, materials or groups."
+print ""
+print "Usage:"
+print "obj2srf input.obj > output.srf"
+print ""
+print "The output goes to stdout. Use > to redirect to"
+print "a file, as shown above"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "Yale University / Institute of Living"
+print "Jan/2011 (first version)"
+print "Apr/2015 (this version)"
+print "http://brainder.org"
+exit } 
+
+# Initialise counters
+v = 0;
+f = 0 }
+
+# Build arrays for the vertices and faces.
+# All the rest will be ignored.
+/^v/ { vtx[v,1] = $2   ; vtx[v,2] = $3   ; vtx[v,3] = $4   ; v++ }
+/^f/ { fac[f,1] = $2-1 ; fac[f,2] = $3-1 ; fac[f,3] = $4-1 ; f++ }
+
+# Start to create the Surface file
+END {
+
+# Number of vertices and faces
+nV = v-1 ;
+nF = f-1 ;
+
+# Output file header
+if (ARGV[1] != "") {
+print "#!ascii"
+print nV+1 , nF+1 }
+
+# Convert vertex coordinates and indices
+for ( v = 0 ; v <= nV ; v++ ) { print vtx[v,1], vtx[v,2], vtx[v,3], 0 }
+for ( f = 0 ; f <= nF ; f++ ) { print fac[f,1], fac[f,2], fac[f,3], 0 }
+}

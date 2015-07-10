@@ -1,0 +1,26 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Flip normals of an SRF file."
+print ""
+print "Usage:"
+print "flipnormals <input.srf>  >  <output.srf>"
+print ""
+print "The output goes to stdout. Use > to redirect to"
+print "a file, as shown above"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "Yale University / Institute of Living"
+print "Sep/2011"
+print "http://brainder.org"
+exit } }
+
+# Count number of vertices and faces from the 2nd record
+NR == 2 { nV=$1 ; nF=$2 }
+
+# Print header and vertex coordinates
+NR<=nV+2 { print $0 }
+
+# Print faces' vertex indices
+NR>=nV+3 && NR<=nV+nF+2 { print $3, $2, $1, $4 }

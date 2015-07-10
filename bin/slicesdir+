@@ -1,0 +1,74 @@
+#!/bin/sh -f
+# Slicesdir+ is a modified version of slicesdir to better suits the needs at the Olin Center
+# Modifications by Anderson Winkler, anderson.winkler@yale.edu
+
+
+if [ "$1" = "" ] ; then
+    echo "Usage: slicesdir [-o] [-p <image>] [-S] <filelist>"
+    echo "-o         : filelist is pairs ( <underlying> <red-outline> ) of images"
+    echo "-p <image> : use <image> as red-outline image on top of all images in <filelist>"
+    echo "-S         : output every second axial slice rather than just 9 ortho slices"
+    exit 1
+fi
+
+/bin/rm -rf slicesdir
+mkdir slicesdir
+
+echo '<html><title>slicesdir+</title><body>' > slicesdir/index.html
+
+Width="100%"
+Compare=0
+if [ "$1" = "-o" ] ; then
+    Width=2000
+    Compare=1
+    shift
+fi
+
+if [ "$1" = "-p" ] ; then
+    pairimage=$2
+    shift 2
+fi
+
+sliceropts="-x 0.4 slicesdir/grota.png -x 0.5 slicesdir/grotb.png -x 0.6 slicesdir/grotc.png -y 0.4 slicesdir/grotd.png -y 0.5 slicesdir/grote.png -y 0.6 slicesdir/grotf.png -z 0.4 slicesdir/grotg.png -z 0.5 slicesdir/groth.png -z 0.6 slicesdir/groti.png"
+convertopts="slicesdir/grota.png + slicesdir/grotb.png + slicesdir/grotc.png + slicesdir/grotd.png + slicesdir/grote.png + slicesdir/grotf.png + slicesdir/grotg.png + slicesdir/groth.png + slicesdir/groti.png"
+if [ "$1" = "-S" ] ; then
+    sliceropts="-S 2 1600 slicesdir/grota.png"
+    convertopts="slicesdir/grota.png"
+    shift
+fi
+
+number=`echo $* | wc -w`
+
+i=0
+while [ $i -lt $number ] ; do
+
+    A=`${FSLDIR}/bin/remove_ext $1`
+    echo $A
+
+    if [ $Compare = 0 ] ; then
+	${FSLDIR}/bin/slicer $A $pairimage -s 1 $sliceropts
+	Q=`echo $A | sed "s/\//_/g"`
+    else
+	B=`${FSLDIR}/bin/remove_ext $2`
+	${FSLDIR}/bin/slicer $A $B -s 1 $sliceropts
+	Q=`echo $A | sed "s/\//_/g"`_to_`echo $B | sed "s/\//_/g"`
+    fi
+
+    ${FSLDIR}/bin/pngappend $convertopts slicesdir/${Q}.png
+    /bin/rm -f slicesdir/grot*.png
+    echo '<p><a href="'${Q}'.png"><img src="'${Q}'.png" width='$Width' title="'${Q}'" border=0></a><font color="#FFFFFF">'${Q}'</font></p>' >> slicesdir/index.html
+
+    shift
+    i=`echo "$i 1 + p" | dc -`
+    if [ $Compare = 1 ] ; then
+	shift
+	i=`echo "$i 1 + p" | dc -`
+    fi
+done
+
+echo '</BODY></HTML>' >> slicesdir/index.html
+
+echo ''
+echo 'Finished. To view, point your web browser at'
+echo file:`pwd`/slicesdir/index.html
+

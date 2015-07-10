@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Create a mosaic PNG file containing, on each row, orthogonal slices
+of a given brain image. Many images can be included, each adding
+an extra row to the file. Useful to inspect many acquisitions of
+a single subject.
+
+Usage:
+slicespng -i "<input images>" -o <output.png>
+
+All the input images go enclosed in a single pair of quotes ("").
+
+FSL must be installed and properly configured.
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Sep/2011
+EOU
+exit
+fi
+
+TMPDIR=/tmp
+
+# Check and accept the arguments
+while getopts 'i:o:t:' OPTION
+do
+  case ${OPTION} in
+    i) IMGLIST="${OPTARG}" ;;
+    o) OUTPNG=${OPTARG} ;;
+    t) TMPDIR=${OPTARG} ;;
+  esac
+done
+
+# Prepare a random string to save temporary files
+RND0=$(echo "$(date) ${IMGLIST} ${OUTPNG}" | md5sum)
+RNDSTR=${RND0:0:12}
+
+# Define a function for Ctrl+C as soon as the RNDSTR is defined
+trap bashtrap INT
+bashtrap()
+{
+   break
+   rm -rf ${TMPDIR}/tmp_${RNDSTR}*
+   exit 1
+}
+
+# Options to be parsed below
+SOPTS="-x 0.4 ${TMPDIR}/tmp_${RNDSTR}_A.png -x 0.5 ${TMPDIR}/tmp_${RNDSTR}_B.png -x 0.6 ${TMPDIR}/tmp_${RNDSTR}_C.png -y 0.4 ${TMPDIR}/tmp_${RNDSTR}_D.png -y 0.5 ${TMPDIR}/tmp_${RNDSTR}_E.png -y 0.6 ${TMPDIR}/tmp_${RNDSTR}_F.png -z 0.4 ${TMPDIR}/tmp_${RNDSTR}_G.png -z 0.5 ${TMPDIR}/tmp_${RNDSTR}_H.png -z 0.6 ${TMPDIR}/tmp_${RNDSTR}_I.png"
+PNGOPTS_H="${TMPDIR}/tmp_${RNDSTR}_A.png + ${TMPDIR}/tmp_${RNDSTR}_B.png + ${TMPDIR}/tmp_${RNDSTR}_C.png + ${TMPDIR}/tmp_${RNDSTR}_D.png + ${TMPDIR}/tmp_${RNDSTR}_E.png + ${TMPDIR}/tmp_${RNDSTR}_F.png + ${TMPDIR}/tmp_${RNDSTR}_G.png + ${TMPDIR}/tmp_${RNDSTR}_H.png + ${TMPDIR}/tmp_${RNDSTR}_I.png"
+
+echo $IMGLIST
+for IMG in ${IMGLIST} ; do
+
+   # Make the 9 orthogonal slices, as in slicesdir
+   ${FSLDIR}/bin/slicer ${IMG} ${SOPTS}
+   
+   # Merge horizontally in a single PNG file
+   IMGSTR=$(echo $(imglob ${IMG}) | sed "s/\//_/g")
+   ${FSLDIR}/bin/pngappend ${PNGOPTS_H} ${TMPDIR}/tmp_${RNDSTR}_${IMGSTR}.png
+   
+   # Increment a list of images to merge vertically later
+   PNGOPTS_V="${PNGOPTS_V} - ${TMPDIR}/tmp_${RNDSTR}_${IMGSTR}.png"
+done
+
+# Now merge vertically
+${FSLDIR}/bin/pngappend ${PNGOPTS_V:3} ${OUTPNG}
+
+# Delete temporary files
+rm -rf ${TMPDIR}/tmp_${RNDSTR}*
+
+# That's it!

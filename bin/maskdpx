@@ -1,0 +1,82 @@
+#!/usr/bin/octave -q
+# function maskdpx(varargin)
+% Masks out the 'unknown' region from a DPV/DPF file
+% replacing its original values by a given new value
+% 
+% Usage:
+% maskdpx(dpxfile,maskfile,newval,outfile)
+% 
+% dpxfile  : DPF/DPV file containing the values to be masked out
+% maskfile : DPF/DPV file containing labels for different regions.
+%            Typically, the regions marked with 0 or 1 are the
+%            'unknown', and these are the ones that will be masked
+%            out from the original DPF/DPV file. If the values to be
+%            masked are different, modify the code inside.
+% newval   : New value to represent the masked out vertices or faces
+% outfile  : File to be saved (i.e., dpxfile masked)
+% 
+% _____________________________________
+% Anderson M. Winkler
+% Yale University / Institute of Living
+% Jul/2011
+
+% Do OCTAVE stuff, but use TRY to ensure MATLAB compatibility
+try
+    % Get the inputs
+    varargin = argv();
+    nargin = numel(varargin);
+
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Masks out the ''unknown'' region from a DPV/DPF file\n');
+        fprintf('replacing its original values by a given new value\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('maskdpx <dpxfile> <maskfile> <newval> <outfile> \n');
+        fprintf('\n');
+        fprintf('dpxfile  : DPF/DPV file containing the values to be masked out\n');
+        fprintf('maskfile : DPF/DPV file containing labels for different regions.\n');
+        fprintf('           Typically, the regions marked with 0 or 1 are the\n');
+        fprintf('           ''unknown'', and these are the ones that will be masked\n');
+        fprintf('           out from the original DPF/DPV file. If the values to be\n');
+        fprintf('           masked are different, modify the code inside.\n');
+        fprintf('newval   : New value to represent the masked out vertices or faces\n');
+        fprintf('outfile  : File to be saved (i.e., dpxfile masked)\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('Yale University / Institute of Living\n');
+        fprintf('Aug/2011\n');
+        return;
+    end
+end
+
+% Accept arguments
+if nargin ~= 4,
+    error('Invalid number of arguments');
+end
+crvfile  = varargin{1};
+maskfile = varargin{2};
+newval   = varargin{3};
+outfile  = varargin{4};
+if ischar(newval), newval = eval(newval); end
+
+% Read the original data
+[crv,crd,idx] = dpxread(crvfile);
+
+% Read the atlas labels
+mas = crvread(maskfile);
+
+% Check size sanity
+if numel(mas) ~= numel(crv),
+    error('Input files don''t contain the same number of datapoints.');
+end
+
+% Replace the areas to be masked with a given value
+crv(mas<=1) = newval;
+
+% Save the output
+dpxwrite(outfile,crv,crd,idx);

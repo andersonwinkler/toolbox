@@ -1,0 +1,56 @@
+#!/bin/sh
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Batch convert surface and DPV (aka curvature) files from an average 
+subject (such as fsaverage) to ASCII format.
+FreeSurfer must be correctly configured in the memory, with
+both \${FREESURFER_HOME} and \${SUBJECTS_DIR} variables set.
+
+Usage:
+avgs2asc <subject id>
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Jan/2011
+EOU
+exit
+fi
+
+# Subject ID and what to convert
+SUBJ=$1
+
+# Hemispheres
+HEMI="lh rh"
+
+# Surfaces
+SURF="inflated inflated_avg inflated_pre orig orig_avg pial pial_avg smoothwm sphere sphere.reg sphere.reg.avg white white_avg"
+
+# DPV (Curvatures)
+CURV="area avg_curv avg_sulc avg_thickness curv sulc thickness white_avg.H white_avg.K orig.avg.area.mgh pial.avg.area.mgh white.avg.area.mgh"
+
+# Simplify a bit with a shorter variable
+SDIR=${SUBJECTS_DIR}/${SUBJ}
+
+# Where to store the outputs
+mkdir -p ${SDIR}/ascii
+
+# For each hemisphere
+for h in ${HEMI} ; do
+
+   # For each surface file
+   for s in ${SURF} ; do
+      echo "${SDIR}/surf/${h}.${s} -> ${SDIR}/ascii/${h}.${s}.srf"
+      ${FREESURFER_HOME}/bin/mris_convert ${SDIR}/surf/${h}.${s} ${SDIR}/ascii/${h}.${s}.asc
+      mv ${SDIR}/ascii/${h}.${s}.asc ${SDIR}/ascii/${h}.${s}.srf
+   done
+
+   # For each curvature file
+   for c in ${CURV} ; do
+      echo "${SDIR}/surf/${h}.${c} -> ${SDIR}/ascii/${h}.${c}.crv"
+      ${FREESURFER_HOME}/bin/mris_convert -c ${SDIR}/surf/${h}.${c} ${SDIR}/surf/${h}.white ${SDIR}/ascii/${h}.${c}.asc
+      mv ${SDIR}/ascii/${h}.${c}.asc ${SDIR}/ascii/${h}.${c}.dpv
+   done
+done

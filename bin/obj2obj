@@ -1,0 +1,22 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Simplify an OBJ file to have vertices and faces only, without" 
+print "normals, materials, groups, etc, so that it can be more easily"
+print "converted to other formats, retaining only the geometry."
+print ""
+print "Usage:"
+print "obj2obj <input.obj>  >  <output.obj>"
+print ""
+print "The output goes to stdout. Use > to redirect to"
+print "a file, as shown above"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "Yale University / Institute of Living"
+print "Jun/2011"
+exit } }
+
+# Simple like this:
+/^v/ { print $0 }
+/^f/ { print $0 }

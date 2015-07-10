@@ -1,0 +1,191 @@
+#!/bin/bash
+
+# Define some paths and vars
+ARCH_DIR=/home/winkler/archive84
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Retrieve GOBS images from the archives at the Olin Center
+and convert to NIFTI
+
+Usage: get_gobs [options]
+
+The options are:
+-s <mriid> : Specify one MRI ID (e.g. EH0109)
+-l <file>  : Specify a file list with the MRI IDs to retrieve, one per line
+             The options -s and -l can be combined
+-p <output path> : Path to save the images
+-t : Retrieve the T1-weighted images
+-f : Retrieve the FLAIR images
+-d : Retrieve the diffusion-weighted images
+-b : Retrieve the field maps
+-e : Retrieve the EPI time series
+-z : Compress the images (gzip)
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Dec/2008 (first version)
+Jan/2012 (this version)
+EOU
+exit
+fi
+
+# Test if dcm2nii is present
+which dcm2nii &> /dev/null
+if [ $? -eq 0 ] ; then
+  echo "Using for conversion the dcm2nii found at: $(which dcm2nii)"
+else
+  echo "ERROR: dcm2nii not found!"
+  echo "If it is installed, make sure it's location is included in \$PATH."
+  echo "Otherwise, download, install, and include it in \$PATH."
+  exit 1
+fi
+
+# Some defaults to be changed below
+PWD=$(pwd)
+SESS_LIST=""
+GET_T1W=0 ; GET_FLA=0 ; GET_DIF=0 ; GET_FMA=0 ; GET_EPI=0
+GZIP=N ; gz="" ; ALL=0
+
+# Check and accept the arguments
+while getopts 's:l:tfdbep:z' OPTION
+do
+  case ${OPTION} in
+    s) SESS_LIST="${SESS_LIST} ${OPTARG}" ;;
+    l) SESS_LIST="${SESS_LIST} $(cat ${OPTARG})" ;;
+    t) GET_T1W=1 ;;
+    f) GET_FLA=1 ;;
+    d) GET_DIF=1 ;;
+    b) GET_FMA=1 ;;
+    e) GET_EPI=1 ;;
+    p) if [ ${OPTARG:0:1} == "/" ] ; then
+         PATH_SAVE=${OPTARG}
+       else
+         PATH_SAVE=${PWD}/${OPTARG}
+       fi
+       if [ ! -e ${PATH_SAVE} ] ; then
+         mkdir -p ${PATH_SAVE}
+       fi ;;
+    z) GZIP=Y 
+       gz=.gz ;;
+  esac
+done
+
+# Special cases: empty list and no path
+if [ "${SESS_LIST}" == "" ] ; then 
+  echo "You have to specify subjects with -s or -l options."
+  exit 1
+fi
+if [ "${PATH_SAVE}" == "" ] ; then 
+  PATH_SAVE=${PWD}
+  echo "No output path informed. Saving to current directory."
+fi
+
+# Loop over sessions
+for s in $SESS_LIST ; do
+  echo -n "${s}: "
+  cd ${ARCH_DIR}/${s}
+  IS_T1W=0 ; IS_FLA=0 ; IS_DIF=0 ; IS_FMAm=0 ; IS_FMAp=0 ; IS_EPI=0
+
+  # Loop over directories to see what is inside
+  for m in $(ls -1 2>/dev/null) ; do
+    cd ${ARCH_DIR}/${s}/${m}
+
+    # Count the number of files
+    nDES=$(ls -1 *.des 2>/dev/null | wc -l)
+    nIMG=$(ls -1 *.img 2>/dev/null | wc -l)
+    nALL=$(ls -1 *     2>/dev/null | wc -l)
+
+    # Do some tests to see what is what
+    if [ ${m:0:4} == "8000" ]                     ; then IS_T1W=${m}  ; fi
+    if [ ${nIMG} -eq 160 ] || [ ${nIMG} -eq 176 ] ; then IS_FLA=${m}  ; fi
+    if [ ${nDES} -eq  58 ] && [ ${nIMG} -eq 116 ] ; then IS_DIF=${m}  ; fi
+    if [ ${nDES} -eq   1 ] && [ ${nIMG} -eq 100 ] ; then IS_FMAm=${m} ; fi
+    if [ ${nDES} -eq   1 ] && [ ${nIMG} -eq  50 ] ; then IS_FMAp=${m} ; fi
+    if [ ${nIMG} -eq 150 ] || [ ${nALL} -eq 450 ] ; then IS_EPI=${m}  ; fi
+  done
+
+  # ===[ T1-WEIGHTED (MPRAGE) ]===
+  if [ ${GET_T1W} -eq 1 ] && [ ${IS_T1W} -ne 0 ] ; then
+    cd ${ARCH_DIR}/${s}/${IS_T1W}/
+    if [ $(ls *.zip 2>/dev/null | wc -l) -gt 1 ] ; then
+      echo -n "T1W "
+      mkdir -p ${PATH_SAVE}/${s}/t1w
+      n=1 ; nstr=$(printf %02d ${n})
+      for z in *.zip ; do
+        mkdir -p ${PATH_SAVE}/${s}/t1w/${z%.zip}
+        unzip -qq ${z} -d ${PATH_SAVE}/${s}/t1w/${z%.zip}/
+        cd ${PATH_SAVE}/${s}/t1w/${z%.zip}/
+        for d in *.img ; do
+          dcm2nii -a Y -f Y -d N -e N -f Y -g ${GZIP} -i N -m N -n Y -p N -r N -v Y -x N ${d} 1>/dev/null
+          [[ -e ${d%.img}.nii${gz} ]] && mv ${d%.img}.nii${gz} ../${s}_t1w_${nstr}.nii${gz}
+          break
+        done
+        cd ${ARCH_DIR}/${s}/${IS_T1W}/
+        rm -rf ${PATH_SAVE}/${s}/t1w/${z%.zip}
+        n=$(echo ${n} 1 + p |dc) ; nstr=$(printf %02d ${n})
+      done
+    fi
+  fi
+
+  # ===[ FLAIR ]===
+  if [ ${GET_FLA} -eq 1 ] && [ ${IS_FLA} -ne 0 ] ; then
+    echo -n "FLA "
+    mkdir -p ${PATH_SAVE}/${s}/fla
+    cd ${ARCH_DIR}/${s}/${IS_FLA}
+    for d in *.img ; do
+      dcm2nii -a Y -f Y -d N -e N -f Y -g ${GZIP} -i N -m N -n Y -o ${PATH_SAVE}/${s}/fla/ -p N -r N -v Y -x N ${d} 1>/dev/null
+      [[ -e ${PATH_SAVE}/${s}/fla/${d%.img}.nii${gz} ]] && mv ${PATH_SAVE}/${s}/fla/${d%.img}.nii${gz} ${PATH_SAVE}/${s}/fla/${s}_fla.nii${gz}
+      break
+    done
+  fi
+
+  # ===[ DIFFUSION ]===
+  if [ ${GET_DIF} -eq 1 ] && [ ${IS_DIF} -ne 0 ] ; then
+    echo -n "DIF "
+    mkdir -p ${PATH_SAVE}/${s}/dif
+    cd ${ARCH_DIR}/${s}/${IS_DIF}
+    for d in s_*.img ; do
+      dcm2nii -a Y -f Y -d N -e N -f Y -g ${GZIP} -i N -m N -n Y -o ${PATH_SAVE}/${s}/dif/ -p N -r N -v Y -x N ${d} 1>/dev/null
+      [[ -e ${PATH_SAVE}/${s}/dif/s_${s}_${IS_DIF}_???.nii${gz} ]] && mv ${PATH_SAVE}/${s}/dif/s_${s}_${IS_DIF}_???.nii${gz} ${PATH_SAVE}/${s}/dif/${s}_dif.nii${gz}
+      [[ -e ${PATH_SAVE}/${s}/dif/s_${s}_${IS_DIF}_???.bvec ]]     && mv ${PATH_SAVE}/${s}/dif/s_${s}_${IS_DIF}_???.bvec ${PATH_SAVE}/${s}/dif/${s}_dif.bvec
+      [[ -e ${PATH_SAVE}/${s}/dif/s_${s}_${IS_DIF}_???.bval ]]     && mv ${PATH_SAVE}/${s}/dif/s_${s}_${IS_DIF}_???.bval ${PATH_SAVE}/${s}/dif/${s}_dif.bval
+      break
+    done
+  fi
+
+  # ===[ FIELDMAPS ]===
+  if [ ${GET_FMA} -eq 1 ] && [ ${IS_FMAm} -ne 0 ] && [ ${IS_FMAp} -ne 0 ] ; then
+    echo -n "FMA "
+    mkdir -p ${PATH_SAVE}/${s}/fma
+    cd ${ARCH_DIR}/${s}/${IS_FMAm}   # Magnitude maps
+    for d in s_*.img ; do
+      dcm2nii -a Y -f Y -d N -e N -f Y -g ${GZIP} -i N -m N -n Y -o ${PATH_SAVE}/${s}/fma/ -p N -r N -v Y -x N ${d}  1>/dev/null
+      [[ -e ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAm}_001.nii${gz} ]] && mv ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAm}_001.nii${gz} ${PATH_SAVE}/${s}/fma/${s}_fmm.nii${gz}
+      [[ -e ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAm}_100.nii${gz} ]] && mv ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAm}_100.nii${gz} ${PATH_SAVE}/${s}/fma/${s}_fmm.nii${gz}
+      [[ -e ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAm}_002.nii${gz} ]] && mv ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAm}_002.nii${gz} ${PATH_SAVE}/${s}/fma/${s}_fmm.nii${gz}
+      break
+    done
+    cd ${ARCH_DIR}/${s}/${IS_FMAp}   # Phase maps
+    for d in s_*.img ; do
+      dcm2nii -a Y -f Y -d N -e N -f Y -g ${GZIP} -i N -m N -n Y -o ${PATH_SAVE}/${s}/fma/ -p N -r N -v Y -x N ${d}  1>/dev/null
+      [[ -e ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAp}_001.nii${gz} ]] && mv ${PATH_SAVE}/${s}/fma/s_${s}_${IS_FMAp}_001.nii${gz} ${PATH_SAVE}/${s}/fma/${s}_fmp.nii${gz}
+      break
+    done
+  fi
+
+  # ===[ ECHO-PLANAR ]===
+  if [ ${GET_EPI} -eq 1 ] && [ ${IS_EPI} -ne 0 ] ; then
+    echo -n "EPI "
+    mkdir -p ${PATH_SAVE}/${s}/epi
+    cd ${ARCH_DIR}/${s}/${IS_EPI}
+    dcm2nii -a Y -f Y -d N -e N -f Y -g ${GZIP} -i N -m N -n Y -o ${PATH_SAVE}/${s}/epi/ -p N -r N -v Y -x N s_${s}*_001.img  1>/dev/null
+    [[ -e ${PATH_SAVE}/${s}/epi/s_${s}_${IS_EPI}_001.nii${gz} ]] && mv ${PATH_SAVE}/${s}/epi/s_${s}_${IS_EPI}_001.nii${gz} ${PATH_SAVE}/${s}/epi/${s}_epi.nii${gz}
+  fi
+  echo ""
+done
+
+cd ${PWD}
+exit 0

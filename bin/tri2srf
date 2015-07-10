@@ -1,0 +1,30 @@
+#!/bin/gawk -f
+
+BEGIN { if (ARGV[1] == "") { 
+print "Convert triangle format (.tri) to Surface ASCII format (.srf)."
+print ""
+print "Usage:"
+print "tri2srf input.tri > output.srf"
+print ""
+print "The output goes to stdout. Use > to redirect to"
+print "a file, as shown above"
+print ""
+print "_____________________________________"
+print "Anderson M. Winkler"
+print "FMRIB / Univ. of Oxford"
+print "Apr/2015"
+print "http://brainder.org"
+exit } else scale=1 }
+
+# Count number of vertices and faces from the 2nd record
+NR == 1 { nV=$1 }
+
+# Convert vertex coordinates
+NR>=2 && NR<=nV+1 { vtx[NR-2][0]=$2; vtx[NR-2][1]=$3; vtx[NR-2][2]=$4 }
+
+# Convert faces' vertex indices and everything else.
+NR == nV+2 { nF=$1 ;
+print "#!ascii Converted using tri2srf." ;
+print nV, nF ; 
+for (v = 0 ; v<nV ; v++) { print vtx[v][0]*scale, vtx[v][1]*scale, vtx[v][2]*scale, 0 } }
+NR>=nV+3 && NR<=nV+nF+2 { print $2-1, $3-1, $4-1, 0 }

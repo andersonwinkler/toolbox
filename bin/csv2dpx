@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Convert columns from a CSV table into DPV/DPF file.
+
+Usage:
+csv2dpx <csvfile> '<columns>' prefix suffix
+
+csvfile   : CSV file that will be converted
+'columns' : list of columns to be used to create the
+            DPX/DPF file
+prefix    : File prefix for the outputs. Can include path.
+suffix    : File suffix (extension) for the outputs.
+
+Example: 
+csv2dpx csvfile.csv '3 4 5 9 10 12' /path/to/output/lh.thick dpv
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Sep/2011
+http://brainder.org
+EOU
+exit
+fi
+
+csvfile=$1
+cols=$2
+pfx=$3
+sfx=$4
+
+for c in ${cols} ; do
+   cname=$(head -n 1 ${csvfile} | cut -d ',' -f ${c})
+   cut -d ',' -f ${c} ${csvfile} | awk 'NR>1 {print NR-2,0,0,0,$1}' > ${pfx}.${cname}.${sfx}
+done
+
+
+
