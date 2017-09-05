@@ -1,0 +1,157 @@
+% #!/usr/bin/octave -q
+function slicetiming(varargin)
+% Run slice timing correction using the algorithm originally from 
+% Geoffrey Aguirre and Eric Zarahn, later integrated into SPM.
+% 
+% Usage:
+% slicetiming(filein,TR,refslice,sliceorder,fileout)
+% 
+% - filein     : Input 4D file to be corrected.
+% - TR         : Repetition time.
+% - refslice   : Reference slice.
+% - sliceorder : Vector of slice acquisition order, or timings (in ms).
+% - fileout    : Output file name
+% 
+% This version uses the same implementation from SPM, without all
+% the GUI elements and other SPM-centric features.
+% This version requires PALM (for file i/o).
+% 
+% _____________________________________
+% Anderson M. Winkler
+% Hospital Israelita Albert Einstein
+% May/2017
+% http://brainder.org
+
+try
+    % Get the inputs
+    varargin = argv();
+
+    % Disable memory dump on SIGTERM
+    sigterm_dumps_octave_core(0);
+
+    % Print usage if no inputs are given
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Run slice timing correction using the algorithm originally from\n');
+        fprintf('Geoffrey Aguirre and Eric Zarahn, later integrated into SPM.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('slicetiming(filein,TR,refslice,sliceorder,fileout)\n');
+        fprintf('\n');
+        fprintf('- filein     : Input 4D file to be corrected.\n');
+        fprintf('- TR         : Repetition time.\n');
+        fprintf('- refslice   : Reference slice.\n');
+        fprintf('- sliceorder : Vector of slice acquisition order, or timings (in ms).\n');
+        fprintf('- fileout    : Output file name.\n');
+        fprintf('\n');
+        fprintf('This version uses the same implementation from SPM, without all\n');
+        fprintf('the GUI elements and other SPM-centric features.\n');
+        fprintf('This version requires PALM (for file i/o).\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('Hospital Israelita Albert Einstein\n');
+        fprintf('May/2017\n');
+        fprintf('http://brainder.org\n');
+        return;
+    end
+end
+
+% Take inputs:
+narginchk(5,5);
+fileI      = varargin{1};
+TR         = varargin{2};
+refslice   = varargin{3};
+sliceorder = varargin{4};
+fileO      = varargin{5};
+if ischar(TR),         TR         = eval(TR);         end
+if ischar(refslice),   refslice   = eval(refslice);   end
+if ischar(sliceorder), sliceorder = eval(sliceorder); end
+
+% Read input file, prepare output:
+I = palm_miscread(fileI,false);
+O = I;
+O.filename = fileO;
+
+% Sizes for later:
+sz  = size(I.data);
+nX  = sz(1); nY = sz(2); nZ = sz(3); nV = sz(4);
+len = 2^(floor(log2(nV))+1);
+
+% Timings:
+TA        = TR - TR/nZ;
+timing(1) = TA/(nZ-1);
+timing(2) = TR - TA;
+
+% Some general processing:
+if nZ ~= numel(sliceorder),
+    error('Number of slices in the file don''t match the vector with slice orderings.');
+end
+if ~ isequal(1:nZ,sort(sliceorder)),
+    if ~ all(sliceorder >= 0 & sliceorder <= TR*1000)
+        error('Input is neither slice indices nor slice times.');
+    end
+    unit = 'times';
+else
+    if ~ ismember(refslice,sliceorder),
+        error('Reference slice should contain a slice index.');
+    end
+    unit = 'indices';
+end
+
+% Set up [time x voxels] matrix for holding image info
+stack = zeros([len nX]);
+
+% Compute shifting amount from reference slice and slice order
+if isequal(unit,'times'),
+    shiftamount = (sliceorder-refslice)/(1000 * TR);
+else
+    rslice      = find(sliceorder == refslice);
+    [~,idx]     = sort(sliceorder);
+    shiftamount = (idx-rslice) * timing(1)/TR;
+end
+
+% For loop to perform correction slice by slice
+for z = 1:nZ,
+    slices = squeeze(I.data(:,:,z,:));
+    phi    = zeros(1,len);
+    
+    % Phi represents a range of phases up to the Nyquist frequency
+    % Shifted phi 1 to right.
+    for f = 1:len/2
+        phi(f+1) = -1*shiftamount(z)*2*pi/(len/f);
+    end
+    
+    % Mirror phi about the center
+    % 1 is added on both sides to reflect Matlab's 1 based indices
+    phi(len/2+1+1:len) = -fliplr(phi(1+1:len/2));
+    
+    % Transform phi to the frequency domain and take the complex transpose:
+    shifter = [cos(phi) + sin(phi)*sqrt(-1)].';
+    shifter = shifter(:,ones(size(stack,2),1));
+    
+    % Loop over columns:
+    for y = 1:nY,
+        
+        % Extract columns from slices:
+        stack(1:nV,:) = reshape(slices(:,y,:),[nX nV])';
+        
+        % Fill in continous function to avoid edge effects:
+        for g = 1:size(stack,2)
+            stack(nV+1:end,g) = linspace(stack(nV,g),stack(1,g),len-nV)';
+        end
+        
+        % Shift the columns:
+        stack = real(ifft(fft(stack,[],1).*shifter,[],1));
+        
+        % Re-insert shifted columns:
+        slices(:,y,:) = reshape(stack(1:nV,:)',[nX 1 nV]);
+    end
+    
+    % Write out the slice for all volumes:
+    for v = 1:nV,
+        O.data(:,:,z,v) = slices(:,:,v);
+    end
+end
+
+% Save to disk:
+palm_miscwrite(O);

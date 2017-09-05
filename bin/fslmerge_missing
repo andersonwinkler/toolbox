@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Print usage if no argument is given
+if [ -z "$1" ]; then
+cat <<EOU
+Merge files as in "fslmerge" but if some inputs are missing,
+replace them for a placeholder, and produce a file with
+missing data indicators that can be used with PALM.
+
+Usage:
+
+fslmerge <-x/y/z/t/a> <output> <file1 file2...>
+ -t : concatenate images in time
+ -x : concatenate images in the x direction
+ -y : concatenate images in the y direction
+ -z : concatenate images in the z direction
+ -a : auto-choose: single slices -> volume; volumes -> 4D
+
+Requirements:
+FSL must have been configured and the variable FSLDIR
+must have been correctly set.
+
+_____________________________________
+Anderson M. Winkler
+FMRIB / Univ. of Oxford
+Dec/2015
+http://brainder.org
+EOU
+exit
+fi
+
+DIM=${1}
+OUT=$(${FSLDIR}/bin/remove_ext ${2})
+
+echo $DIM
+echo $OUT
+shift
+shift
+
+# Generate an image full of zeroes, which will be the
+# placeholder for the missing data in the 4D file:
+for i in $@ ; do
+	if [[ -f ${i} ]] ; then
+		fslmaths ${i} -mul 0 ${OUT}_zero
+		break
+	fi
+done
+
+# Make a list of files to be merged:
+LIST=""
+rm ${OUT}_missing_indicators.csv
+for i in $@ ; do
+	if [[ -f ${i} ]] ; then
+		LIST="${LIST} ${i}"
+		echo 0 >> ${OUT}_missing_indicators.csv
+	else
+		LIST="${LIST} ${OUT}_zero"
+		echo 1 >> ${OUT}_missing_indicators.csv
+	fi
+done
+
+# Now do the actual merger:
+${FSLDIR}/bin/fslmerge ${DIM} ${OUT} ${LIST}
+
+# Delete the temporary placeholder image:
+${FSLDIR}/bin/imrm ${OUT}_zero

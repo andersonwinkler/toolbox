@@ -41,6 +41,7 @@ else { ORS="," } }
 
 # Proportion of variance due to covariates
 /Proportion\ of\ Variance\ Due\ to\ All\ Final\ Covariates\ Is/ { if (getline > 0) { print $1 } }
+/No\ covariates\ were\ included\ in\ the\ final\ model/ { print "NaN" }
 
 # For quantitative traits there is no kurtosis info, then this is the last, comma
 # so remove the comma and put a new line

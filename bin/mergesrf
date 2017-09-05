@@ -1,5 +1,5 @@
 #!/usr/bin/octave -q
-# function mergesrf(varargin)
+% function mergesrf(varargin)
 % Merge multiple surface files in *.srf format
 % into a single file.
 %

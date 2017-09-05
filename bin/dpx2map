@@ -382,17 +382,17 @@ if all(v.imgsize),
     end
     
     % Save the colourbar, as PNG
-    pngfile = sprintf('%s.png',v.oprefix);
-    fprintf('Saving PNG: %s\n',pngfile);
-    png = zeros([max(v.imgsize) 1 3]);
-    for c = 1:3,
-        png(:,1,c) = rgb(cidx,c);
-    end
-    png = repmat(png,[1 min(v.imgsize) 1]);
-    if v.imgsize(1) > v.imgsize(2),
-        png = permute(png,[2 1 3]);
-    end
-    imwrite(uint8(png),pngfile,'png');
+%    pngfile = sprintf('%s.png',v.oprefix);
+%    fprintf('Saving PNG: %s\n',pngfile);
+%    png = zeros([max(v.imgsize) 1 3]);
+%    for c = 1:3,
+%        png(:,1,c) = rgb(cidx,c);
+%    end
+%    png = repmat(png,[1 min(v.imgsize) 1]);
+%    if v.imgsize(1) > v.imgsize(2),
+%        png = permute(png,[2 1 3]);
+%    end
+%    imwrite(uint8(png),pngfile,'png');
 end
 
 % That's it!

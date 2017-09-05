@@ -1,0 +1,86 @@
+#!/usr/bin/octave -q
+% function dpx2mgh(varargin)
+% Concatenates several DPX (DPF or DPV) files into a
+% single MGH file, with each DPX file represented as
+% a column. Indices and coordinates are stripped out.
+% 
+% Usage:
+% dpx2mgh('mghfile','dpxfile1','dpxfile2',...,'dpxfileN')
+% 
+% Note that FreeSurfer must be installed and properly
+% configured for this function to work.
+% 
+% _____________________________________
+% Anderson M. Winkler
+% FMRIB / University of Oxford
+% Jul/2015
+% http://brainder.org
+
+% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility:
+try %#ok
+    % Get the inputs:
+    varargin = argv();
+
+    % Disable memory dump on SIGTERM:
+    sigterm_dumps_octave_core(0);
+
+    % Print usage if no inputs are given:
+    if isempty(varargin) || strcmp(varargin{1},'-q'),
+        fprintf('Concatenates several DPX (DPF or DPV) files into a\n');
+        fprintf('single MGH file, with each DPX file represented as\n');
+        fprintf('a column. Indices and coordinates are stripped out.\n');
+        fprintf('\n');
+        fprintf('Usage:\n');
+        fprintf('dpx2mgh <mghfile> <dpxfile1> <dpxfile2> ... <dpxfileN>\n');
+        fprintf('\n');
+        fprintf('Note that FreeSurfer must be installed and properly\n');
+        fprintf('configured for this function to work.\n');
+        fprintf('\n');
+        fprintf('_____________________________________\n');
+        fprintf('Anderson M. Winkler\n');
+        fprintf('FMRIB / University of Oxford\n');
+        fprintf('Jul/2015\n');
+        fprintf('http://brainder.org\n');
+        return;
+    end
+end
+
+% Before doing all the work, make sure the save_mgh is available:
+if ~ exist('save_mgh','file'),
+    fshome = getenv('FREESURFER_HOME');
+    if isempty(fshome),
+        error([ ...
+            'FreeSurfer not found in this system. Make sure\n' ...
+            '       the variable FREESURFER_HOME is correctly set.'],'');
+    else
+        addpath(fullfile(fshome,'matlab'));
+    end
+end
+
+% Check number of arguments:
+nargin = numel(varargin); % this is redundant but addresses a bug
+if nargin < 2,
+    error('Insufficient number of arguments.');
+end
+
+% For each input dpx file:
+for a = 2:nargin,
+
+    % Print some feedback:
+    fprintf('Working on (%d/%d): %s\n',a-1,nargin-1,varargin{a});
+    
+    % Load it:
+    dpx = dpxread(varargin{a});
+    
+    % Initialise an empty array to store:
+    if a == 2,
+        mgh = zeros(size(dpx,1),1,1,nargin-1);
+    end
+    
+    % Save the result:
+    mgh(:,:,:,a-1) = dpx;
+end
+
+% Save. Note that FreeSurfer must be installed and the
+% directory ${FREESURFER}/matlab must be in the path.
+save_mgh(mgh,varargin{1},eye(4));

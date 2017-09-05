@@ -1,14 +1,14 @@
-function [lEvec,rEvec,Evals,xtras] = pca(varargin)
+function [lEvec,rEvec,Evals,xtras] = epca(varargin)
 % Return the first p eigenvectors and eigenvalues.
 %
 % Usage:
-% [lEvec,rEvec,Evals,xtras] = pca(X,p,dim,norm)
+% [lEvec,rEvec,Evals,xtras] = epca(X,p,dim,norm)
 %
 % Inputs:
 % X     : 2D array
 % p     : Number of eigenvectors and eigenvalues to be
 %         returned.
-% dim   : Dimension ACROSS which the data is mean-centered
+% dim   : Dimension used for mean-centering.
 %         Valid inputs are 1 (or 'rows') or 2 (or 'cols').
 %         If omitted, no mean-centering is performed.
 % norm  : True/False, indicationg whether, in addition to
@@ -23,6 +23,9 @@ function [lEvec,rEvec,Evals,xtras] = pca(varargin)
 %         by their eigenvalues, and the data recovered
 %         after the p+1...rank(X) dimensions were removed.
 %
+% This function was called "pca", but after Matlab created its
+% own similarly-named "pca" function, it was renamed to "epca",
+% for "enhanced pca".
 % _____________________________________
 % Anderson M. Winkler
 % Yale University / Institute of Living

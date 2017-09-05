@@ -47,22 +47,17 @@ eolpos = find(table == eolmark);
 delpos = find(table == delimiter);
 nR = sum(table == eolmark);
 nC = floor(sum(table == delimiter)/nR)+1;
+
+% Allocate a provisory table (cell array) with a size estimated from
+% the number of delimiters and EOLs found. It grows later if needed
 table([eolpos delpos]) = [];
 table = mat2cell(table,1,diff(sort([0 eolpos delpos])')-1);
 table = reshape(table,nC,nR)';
-
-% Loop over each EOL get the content between each
-for r = 1:nR,
-    for c = 1:nC,
-        x = strtrim(table{r,c});
-        if isempty(x) || strcmpi(x,'NaN'),
-            table{r,c} = NaN;
-        else
-            testnum = str2double(table{r,c});
-            if ~ isnan(testnum),
-                table{r,c} = testnum;
-            end
-        end
-    end
-end
+table = cellfun(@(x)strtrim(char(x)),table,'UniformOutput',false);
+idx1  = cellfun(@(x)strcmpi(x,'NaN'),table); table(idx1) = {NaN};
+idx2  = cellfun(@isempty,table); table(idx2) = {NaN};
+idx3  = ~(idx1 | idx2);
+tmp   = cellfun(@str2double,table(idx3),'UniformOutput',false);
+idx4  = ~cellfun(@isnan,tmp); idx3(idx3) = idx4;
+table(idx3) = tmp(idx4);
 toc

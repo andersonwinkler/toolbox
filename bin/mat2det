@@ -14,7 +14,7 @@ print "Anderson M. Winkler"
 print "Yale University / Institute of Living"
 print "Sep/2010"
 print "http://brainder.org."
-print "Based on an earlier code by Roberto Toro."
+print "Based on an earlier version by Roberto Toro."
 exit } }
 
 # Get the matrix elements that matter

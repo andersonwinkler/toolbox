@@ -76,7 +76,7 @@ if numel(mas) ~= numel(crv),
 end
 
 % Replace the areas to be masked with a given value
-crv(mas<=1) = newval;
+crv(mas<1) = newval;
 
 % Save the output
 dpxwrite(outfile,crv,crd,idx);

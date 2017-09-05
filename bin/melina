@@ -1,0 +1,73 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Compute myelin maps for a FreeSurfer subject, provided that the
+subject has been processed using either T2 or FLAIR images.
+
+Usage: melina -s <subjid> [options]
+
+-s <subjid>   : Subject (already processed with recon-all). More than
+                one can be supplied with multiple -s.
+-t <seq>      : Optional. Indicate whether T2 or FLAIR should be used.
+                If not supplied, it will try T2 first, and if not
+                available, it will try FLAIR.
+-f <projfrac> : Fractional projection along normal. Can be between
+                0 and 1, with 0 being white and 1 pial. Can take
+                negative values (in which case it goes deep into
+                the white matter.
+                Default is 0.5. If supplied, the output file will
+                contain the value in the filename.
+                More than one -f can be supploed.
+
+_____________________________________
+Anderson M. Winkler
+Hospital Israelita Albert Einstein
+Aug/2017
+http://brainder.org
+EOU
+exit 1
+fi
+
+# Check and accept the input arguments
+subj=""
+PF_LIST=""
+t2flair=""
+while getopts 's:t:f:' OPTION
+do
+  case ${OPTION} in
+    s) subj=${OPTARG} ;;
+    t) t2flair=${OPTARG} ;;
+    f) PF_LIST="${PF_LIST} ${OPTARG}" ;;
+  esac
+done
+[[ ${PF_LIST} == "" ]] && PF_LIST=0.5 
+if [[ ${t2flair} == "" ]] ; then
+   if   [[ -f ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz ]] ; then
+      t2flair=T2
+   elif [[ -f ${SUBJECTS_DIR}/${subj}/mri/FLAIR.prenorm.mgz ]] ; then
+      t2flair=FLAIR
+   else
+      echo "Error: Neither FLAIR or T2 images found for subject ${subj}."
+      exit 1;
+   fi
+elif [[ ! -f ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz ]] ; then
+   echo "Error: File not found: ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz"
+   exit 1;
+fi
+
+# Compute the ratio T1/T2 or T1/FLAIR
+${FREESURFER_HOME}/bin/fscalc \
+     ${SUBJECTS_DIR}/${subj}/mri/orig.mgz div \
+     ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz --o \
+     ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
+
+# Project to the surface
+for pf in ${PF_LIST} ; do
+   [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr="_${pf}" || pfstr=""
+   for h in lh rh ; do
+      mri_vol2surf --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+         --regheader ${subj} --projfrac ${pf} --interp nearest \
+         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pfstr}.mgz
+   done
+done

@@ -28,7 +28,7 @@ try
         fprintf('Apply a 4x4 affine matrix to a surface file.\n');
         fprintf('\n');
         fprintf('Usage:\n');
-        fprintf('applyxfm2srf(srfin,xfm,srfout)\n');
+        fprintf('applyxfm2srf <srfin> <xfm> <srfout>\n');
         fprintf('\n');
         fprintf('- srfin  : Input surface file.\n');
         fprintf('- xfm    : Text file with the affine matrix.\n');

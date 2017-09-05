@@ -1,0 +1,160 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Given a FEAT directory and a FreeSurfer directory for the
+same subject, computes the the average signal of WM
+and other regions, so that these signals can be used
+in statistical models.
+
+For the FEAT data, all the registration steps must have
+been run. For the FreeSurfer data, recon-all must have
+run until completion. 
+
+Usage: extractsignals -f <FEATdir> -o <out_prefix> \
+                     [-s <FSdir>] [-r] [-d]
+
+-f : FEAT directory for this subject (*.feat).
+-o : Output prefix.
+-s : Directory with FreeSurfer results for this subject. If
+     omitted, FAST will be applied to the highres present in
+     the FEAT directory, and CSF and WM partitions will be used.
+     If supplied, signals will be extracted from the CSF, WM,
+     callosum, cerebellum WM, and brain stem.
+-r : Use raw functional w/ MCFLIRT? If omitted, will use the
+     filtered_func_data from the FEAT drectory.
+-d : Debug mode. Don't remove temporary files.
+
+Outputs are saved as text files that start with <out_prefix>.
+The output prefix can contain paths.
+
+This script requires FSL properly installed and configured.
+If -s is used, then FreeSurfer must also be present.
+
+_____________________________________
+Anderson M. Winkler
+Hospital Israelita Albert Einstein
+May/2017
+http:/brainder.org
+EOU
+exit 1
+fi
+
+# Accept input arguments
+FSDIR=""
+FEATDIR=""
+OUT="extracted"
+RAW="N"
+DEBUG="N"
+while getopts 's:f:o:rd' OPTION
+do
+   case ${OPTION} in
+      s) FSDIR="${OPTARG}"   ;;
+      f) FEATDIR="${OPTARG}" ;;
+      o) OUT="${OPTARG}"     ;;
+      r) RAW="Y"             ;;
+      r) DEBUG="Y"           ;;
+   esac
+done
+
+if [[ ! -e ${FEATDIR} ]] ; then
+  echo "Error: FEAT directory not found: ${FEATDIR}"
+fi
+if [[ "${FSDIR}" != "" ]] && [[ ! -e ${FSDIR} ]] ; then
+  echo "Error: FreeSurfer output directory not found: ${FSDIR}"
+fi
+
+# Prepare a random string to save temporary files
+RND0=$(head -n 1 /dev/urandom | md5sum)
+RNDSTR=${RND0:0:12}
+
+# Define a function for Ctrl+C as soon as the RNDSTR is defined
+trap bashtrap INT
+bashtrap() {
+  rm -rf ${OUT}_${RNDSTR}_* # try to delete temp files
+  exit 1 ; }
+
+# Define which functional images to use
+if [[ ${RAW} == "Y" ]] ; then
+  echo "Working on the input functional timeseries"
+  feat_file=$(awk '/set feat_files\(1\)/ { gsub(/"/,"",$3) ; print $3 }' ${FEATDIR}/design.fsf)
+  if [[ $(${FSLDIR}/bin/imtest ${feat_file}) -eq 0 ]] ; then
+    echo "Error: Original file not found: ${feat_file}"
+    exit 1
+  fi
+  feat_npts=$(awk '/set fmri\(npts\)/ { print $3 }' ${FEATDIR}/design.fsf)
+  feat_ndelete=$(awk '/set fmri\(ndelete\)/ {print $3}' ${FEATDIR}/design.fsf)
+  final_vol=$(echo "${feat_npts} ${feat_ndelete} - p" | dc)
+  mid_vol=$(echo "${final_vol} 2 / p" | dc)
+  ${FSLDIR}/bin/fslmaths ${feat_file} ${OUT}_${RNDSTR}_orig_func_data -odt float
+  ${FSLDIR}/bin/fslroi  ${OUT}_${RNDSTR}_orig_func_data ${OUT}_${RNDSTR}_orig_func_data ${feat_ndelete} ${final_vol}
+  ${FSLDIR}/bin/fslroi  ${OUT}_${RNDSTR}_orig_func_data ${OUT}_${RNDSTR}_example_func   ${mid_vol} 1
+  ${FSLDIR}/bin/mcflirt -in ${OUT}_${RNDSTR}_orig_func_data \
+                   -out ${OUT}_${RNDSTR}_mcflirt_func_data \
+               -reffile ${OUT}_${RNDSTR}_example_func -rmsrel -rmsabs -spline_final
+  FUNCSERIES=${OUT}_${RNDSTR}_mcflirt_func_data
+else
+  FUNCSERIES=${FEATDIR}/filtered_func_data
+fi
+
+# Define the masks. If FreeSurfer is available, use it.
+# Otherwise, run FAST on the FEAT highres and use WM and CSF partitions to create masks.
+if [[ "${FSDIR}" != "" ]] ; then
+  echo "FreeSurfer file format conversions"
+  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${FSDIR}/mri/aparc+aseg.mgz ${OUT}_${RNDSTR}_aparc+aseg.nii.gz
+  ${FSLDIR}/bin/fslswapdim ${OUT}_${RNDSTR}_aparc+aseg RL PA IS ${OUT}_${RNDSTR}_aparc+aseg
+  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${FSDIR}/mri/brainmask.mgz ${OUT}_${RNDSTR}_brainmask.nii.gz
+  ${FSLDIR}/bin/fslswapdim ${OUT}_${RNDSTR}_brainmask RL PA IS ${OUT}_${RNDSTR}_brainmask
+
+  echo "Generating the region masks"
+  ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -mul 0 ${OUT}_${RNDSTR}_csf
+  for r in 4 5 43 44 14 15 72 ; do
+    ${FSLDIR}/bin/fslmaths ${OUT}_${RNDSTR}_aparc+aseg -thr ${r} -uthr ${r} -bin -add ${OUT}_${RNDSTR}_csf ${OUT}_${RNDSTR}_csf
+  done
+  ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -mul 0 ${OUT}_${RNDSTR}_wm
+  for r in 2 41 ; do
+    ${FSLDIR}/bin/fslmaths ${OUT}_${RNDSTR}_aparc+aseg -thr ${r} -uthr ${r} -bin -add ${OUT}_${RNDSTR}_wm ${OUT}_${RNDSTR}_wm
+  done
+  ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -mul 0 ${OUT}_${RNDSTR}_callosum
+  for r in 251 252 253 254 255 ; do
+    ${FSLDIR}/bin/fslmaths ${OUT}_${RNDSTR}_aparc+aseg -thr ${r} -uthr ${r} -bin -add ${OUT}_${RNDSTR}_callosum ${OUT}_${RNDSTR}_callosum
+  done
+  ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -mul 0 ${OUT}_${RNDSTR}_cerebellumwm
+  for r in 7 46 ; do
+    ${FSLDIR}/bin/fslmaths ${OUT}_${RNDSTR}_aparc+aseg -thr ${r} -uthr ${r} -bin -add ${OUT}_${RNDSTR}_cerebellumwm ${OUT}_${RNDSTR}_cerebellumwm
+  done
+  ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -mul 0 ${OUT}_${RNDSTR}_brainstem
+  ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -thr 16 -uthr 16 -bin -add ${OUT}_${RNDSTR}_brainstem ${OUT}_${RNDSTR}_brainstem
+
+  echo "Registering masks"
+  MAT=${OUT}_${RNDSTR}_brainmask2example_func.mat
+  ${FSLDIR}/bin/flirt -in ${OUT}_${RNDSTR}_brainmask -ref ${FEATDIR}/reg/highres -omat ${OUT}_${RNDSTR}_braimask2highres.mat
+  ${FSLDIR}/bin/convert_xfm -omat ${MAT} -concat ${FEATDIR}/reg/highres2example_func.mat ${OUT}_${RNDSTR}_braimask2highres.mat
+  ROILIST="csf wm callosum cerebellumwm brainstem"
+  THR=0.8
+else
+  MAT=${FEATDIR}/reg/highres2example_func.mat
+  ${FSLDIR}/bin/fast -o ${OUT}_${RNDSTR} ${FEATDIR}/reg/highres
+  ${FSLDIR}/bin/immv ${OUT}_${RNDSTR}_pve_0 ${OUT}_${RNDSTR}_CSF
+  ${FSLDIR}/bin/immv ${OUT}_${RNDSTR}_pve_1 ${OUT}_${RNDSTR}_GM
+  ${FSLDIR}/bin/immv ${OUT}_${RNDSTR}_pve_2 ${OUT}_${RNDSTR}_WM
+  ROILIST="CSF WM"
+  THR=0.9
+fi
+
+# Put the masks in the functional's native space, binarise, and get the timecourses
+echo -n "Generating final masks and computing averages: "
+for r in ${ROILIST} ; do
+  echo -n "${r} "
+  ${FSLDIR}/bin/flirt -in ${OUT}_${RNDSTR}_${r} -ref ${FEATDIR}/reg/example_func -init ${MAT} -applyxfm -out ${OUT}_${RNDSTR}_${r}_reg
+  ${FSLDIR}/bin/fslmaths ${OUT}_${RNDSTR}_${r}_reg -thr ${THR} ${OUT}_${RNDSTR}_${r}_reg
+  ${FSLDIR}/bin/fslmeants -i ${FUNCSERIES} -m ${OUT}_${RNDSTR}_${r}_reg -w -o ${OUT}_${r}_signal.txt
+done
+echo ""
+
+# Cleanup
+if [[ "${DEBUG}" == "N" ]] ; then
+  echo "Removing temporary files"
+  rm -rf ${OUT}_${RNDSTR}_*
+fi
+exit 0

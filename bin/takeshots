@@ -1,0 +1,90 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Capture some screenshots of surfaces produced by
+FreeSurfer in standard orientations.
+
+Usage: takeshots [options]
+
+The options are:
+-s <subjid> : Specify one subject ID.
+-l <listid> : Specify a file list with the subject IDs, one per line.
+-m <mesh>   : Specify a surface file (pial, white, inflated, sphere, etc.).
+-p <parc>   : Specify a parcellation to load (aparc, aparc.a2009s, aparc.a2005s).
+-c          : Run also for curv.
+-u          : Run also for sulc.
+-t          : Run also for thickness.
+-y          : Run also for myelin maps (require ?h.myelin.mgz exist)
+-v          : Run also for volumes (aseg + overlaid surfaces).
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Jan/2010
+http://brainder.org
+EOU
+exit 1
+fi
+
+DOASEG="N"
+DOSURF="N"
+DOCURV="N"
+DOSULC="N"
+DOTHCK="N"
+
+# Check and accept the arguments
+while getopts 's:l:m:p:cutyv' OPTION
+do
+  case ${OPTION} in
+    s) DOSURF="Y" ; SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
+    l) DOSURF="Y" ; SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
+    m) DOSURF="Y" ; MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
+    p) DOSURF="Y" ; PARC_LIST="${PARC_LIST} ${OPTARG}" ;;
+    c) DOSURF="Y" ; DOCURV="Y" ;;
+    u) DOSURF="Y" ; DOSULC="Y" ;;
+    t) DOSURF="Y" ; DOTHCK="Y" ;;
+    y) DOSURF="Y" ; DOMYEL="Y" ;;
+    v) DOASEG="Y" ;; 
+  esac
+done
+
+if [[ ${DOSURF} == "Y" ]] ; then
+for s in ${SUBJ_LIST} ; do
+mkdir -p ${SUBJECTS_DIR}/${s}/shots
+  export SUBJECT_NAME=${s}
+  for h in lh rh ; do
+    for m in ${MESH_LIST} ; do
+      export SURF=${m}
+      for p in ${PARC_LIST} ; do
+        export WHAT=${p}
+        tksurfer ${s} ${h} ${m} -tcl  $(dirname $0)/shots_tksurfer.tcl
+      done
+      if [[ ${DOCURV} == "Y" ]] ; then
+        export WHAT=curv
+        tksurfer ${s} ${h} ${m} -curv -tcl  $(dirname $0)/shots_tksurfer.tcl
+      fi
+      if [[ ${DOSULC} == "Y" ]] ; then
+        export WHAT=sulc
+        tksurfer ${s} ${h} ${m} -sulc -tcl  $(dirname $0)/shots_tksurfer.tcl
+      fi
+      if [[ ${DOTHCK} == "Y" ]] ; then
+        export WHAT=thickness
+        tksurfer ${s} ${h} ${m} -overlay ${SUBJECTS_DIR}/${s}/surf/${h}.thickness -fminmax 0 4.5 -tcl  $(dirname $0)/shots_tksurfer.tcl
+      fi
+      if [[ ${DOMYEL} == "Y" ]] ; then
+        export WHAT=myelin
+        tksurfer ${s} ${h} ${m} -overlay ${SUBJECTS_DIR}/${s}/surf/${h}.myelin.mgz -fminmax 0.5 1.5 -tcl  $(dirname $0)/shots_tksurfer.tcl
+      fi
+    done
+  done
+done
+fi
+
+if [[ ${DOASEG} == "Y" ]] ; then
+for s in ${SUBJ_LIST} ; do
+  export SUBJECT_NAME=${s}
+  tkmedit ${s} brainmask.mgz -tcl $(dirname $0)/shots_tkmedit.tcl
+done
+fi
+

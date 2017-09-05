@@ -1,0 +1,10 @@
+tkmedit started: Thu Jan 19 22:14:53 2017
+
+	/opt/freesurfer-5.3.0//tktools/tkmedit.bin s23128 brainmask.mgz -tcl ./shots_tkmedit.tcl 
+
+$Id: tkmedit.c,v 1.343 2011/03/01 01:41:22 nicks Exp $ $Name: stable5 $
+Set user home dir to /home/winkler/Dropbox/tools/toolbox.git/bin
+Set subject home dir to /home/winkler/davidp//subjects-fs//s23128
+Using interface file /opt/freesurfer-5.3.0//tktools/tkmedit.tcl
+Tcl: Successfully parsed tkmedit.tcl
+Tcl: Successfully parsed tkm_functional.tcl

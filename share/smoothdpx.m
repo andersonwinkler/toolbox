@@ -174,12 +174,12 @@ if domatrix,
     % Area of the sphere is 4*pi*R^2
     % The estimated number of non-zero elements is therefore:
     nnz = ceil(nX*nX*(1-cos(fwhmtrunc*opts.f/R))/2);
-    smoothmtx = spalloc(nX,nX,nnz);
+    smoothmtx = spalloc(nX,nX,floor(nnz*.4));
 end
 
 % Loop over datapoints (vertices or centers of faces)
 for v = 1:nX,
-    
+    fprintf('%d\n',v);
     % Geodesic distance between current vertex and all other vertices
     vtx = repmat(vtxi(v,:),[nX 1]);
     G   = geodist(vtx,vtxi,R);

@@ -1,4 +1,4 @@
-function [K2,pval,b1,Zb1,pvalS,b2,Zb2,pvalK] = daptest(X)
+ function [K2,pval,b1,Zb1,pvalS,b2,Zb2,pvalK] = daptest(X)
 % Run the D'Agostino-Pearson normality test, as well as skewness and
 % kurtosis tests.
 % 

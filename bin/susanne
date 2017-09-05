@@ -1,0 +1,43 @@
+#!/bin/sh
+
+if [ -z "$1" ]; then
+cat <<EOU
+Run SUSAN on a whole-head structural image as a preparation
+before running FreeSurfer. Useful when there is just one
+potentially noisy input image.
+
+Usage: susanne <image>
+
+This script requires FSL properly installed and configured.
+
+_____________________________________
+Anderson M. Winkler
+Hospital Israelita Albert Einstein
+July/2017
+http://brainder.org
+EOU
+exit 1
+fi
+
+in=$(${FSLDIR}/bin/remove_ext $1)
+${FSLDIR}/bin/bet ${in} ${in}_braintmp1 -f 0.2
+${FSLDIR}/bin/fast -b --nopve -I 12 ${in}_braintmp1
+${FSLDIR}/bin/fslmaths ${in} -div ${in}_braintmp1_bias ${in}_braintmp1_biascorrected
+
+${FSLDIR}/bin/bet ${in}_braintmp1_biascorrected ${in}_braintmp2 -f 0.3
+${FSLDIR}/bin/fast ${in}_braintmp2
+
+${FSLDIR}/bin/fslmaths ${in}_braintmp2 -mul ${in}_braintmp2_pve_1 ${in}_braintmp2_GM
+GMamount=$(${FSLDIR}/bin/fslstats ${in}_braintmp2_GM    -m)
+GMweight=$(${FSLDIR}/bin/fslstats ${in}_braintmp2_pve_1 -m)
+GMlevel=$(echo "${GMamount} ${GMweight} / p" | dc)
+
+${FSLDIR}/bin/fslmaths ${in}_braintmp2 -mul ${in}_braintmp2_pve_2 ${in}_braintmp2_WM
+WMamount=$(${FSLDIR}/bin/fslstats ${in}_braintmp2_WM    -m)
+WMweight=$(${FSLDIR}/bin/fslstats ${in}_braintmp2_pve_2 -m)
+WMlevel=$(echo "${WMamount} ${WMweight} / p" | dc)
+
+bt=$(echo "$WMlevel $GMlevel - .333 * p" | dc)
+${FSLDIR}/bin/susan ${in}_braintmp1_biascorrected ${bt} 1 3 1 0 ${in}_susan
+
+${FSLDIR}/bin/imrm ${in}_braintmp*

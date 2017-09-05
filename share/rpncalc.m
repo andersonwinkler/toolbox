@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function rpncalc(varargin)
 % Do some simple calculations using RPN notation.
 %
@@ -12,6 +11,7 @@ function rpncalc(varargin)
 %   Multiplicative (elementwise): *, /, and ^
 %   Multiplicative (matrix): **, //, \\ and ^^
 %   Logic: <, >, <=. >=, ==, ~=
+%   Comparisons: min, max
 % Mathematical operators (unary): log, ln, exp
 % Stack manipulation: swap dup drop
 % File operations: load save
@@ -50,6 +50,7 @@ try %#ok
         fprintf('  Multiplicative (elementwise): *, /, and ^\n');
         fprintf('  Multiplicative (matrix): **, //, \\\\ and ^^\n');
         fprintf('  Logic: <, >, <=. >=, ==, ~=\n');
+        fprintf('  Comparisons: min, max\n');
         fprintf('Mathematical operators (unary): log, ln, exp\n');
         fprintf('Stack manipulation: swap dup drop\n');
         fprintf('File operations: load save\n');
@@ -168,6 +169,24 @@ for a = 1:nargin,
         % If the current argument is multiplicative, execute it
         fprintf('Performing a logical operation\n')
         stack{1} = eval(sprintf('stack{2} %s stack{1}',varargin{a}));
+        stack(2) = [];
+        
+    elseif strcmpi('max',varargin{a});
+        
+        % MAXIMUM
+        
+        % Compute the log of the 1st element in the stack
+        fprintf('Retaining the maximum.\n')
+        stack{1} = max(stack{1},stack{2});
+        stack(2) = [];
+        
+    elseif strcmpi('min',varargin{a});
+        
+        % MINIMUM
+        
+        % Compute the log of the 1st element in the stack
+        fprintf('Retaining the minimum.\n')
+        stack{1} = min(stack{1},stack{2});
         stack(2) = [];
         
     elseif strcmpi('log',varargin{a});

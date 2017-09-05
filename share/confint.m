@@ -32,6 +32,7 @@ function [L,U] = confint(n,X,alpha,meth)
 % Anderson Winkler & Tom Nichols
 % FMRIB / University of Oxford
 % Apr/2012
+% http://brainder.org
 
 k  = norminv(1-alpha/2);
 p  = X./n;          % Proportion of successes

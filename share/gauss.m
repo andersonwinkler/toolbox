@@ -2,7 +2,7 @@ function [f,s,F] = gauss(siz,fwhms)
 % Create a gaussian function of up to 4 dimensions.
 %
 % Usage:
-% [f,s] = gauss(siz,fwhms)
+% [f,s,F] = gauss(siz,fwhms)
 % 
 % Inputs:
 % - siz   : A vector with the dimensions. E.g for a 3-D filter,

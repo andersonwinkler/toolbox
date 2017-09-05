@@ -29,6 +29,9 @@ try
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
 
+    % Disable annoying warning in FS
+    %warning ('off','Octave:divide-by-zero');
+    
     % Print usage if no inputs are given
     if isempty(varargin) || strcmp(varargin{1},'-q'),
         fprintf('Project the values from a volume into a surface. Each vertex\n');
@@ -134,8 +137,8 @@ dpv = zeros(nV,1);
 for v = 1:nV,
     
     % Select the voxels of interest
-    vbox = vol(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
-    mbox = msk(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
+    vbox = vol (flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
+    mbox = msk (flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
     xbox = volx(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
     ybox = voly(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
     zbox = volz(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));

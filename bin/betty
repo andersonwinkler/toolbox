@@ -1,0 +1,24 @@
+#!/bin/sh
+
+if [ -z "$1" ]; then
+cat <<EOU
+Run BET with bias correction.
+
+Usage: betty <brain image>
+
+This script requires FSL properly installed and configured.
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Oct/2009
+http://brainder.org
+EOU
+exit 1
+fi
+
+in=$(${FSLDIR}/bin/remove_ext $1)
+${FSLDIR}/bin/bet ${in} ${in}_braintmp -f 0.2
+${FSLDIR}/bin/fast -b --nopve ${in}_braintmp
+${FSLDIR}/bin/fslmaths ${in} -div ${in}_braintmp_bias ${in}_biascorrected
+${FSLDIR}/bin/bet ${in}_biascorrected ${in}_brain -f 0.3

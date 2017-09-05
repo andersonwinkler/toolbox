@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/opt/local/bin/octave -q
 % function dpxstats(varargin)
 % Display some statistics for a DPF or DPV file.
 % If more than one file is specified, and if all contain
@@ -64,7 +64,7 @@ dpx   = cell(nfiles,1);
 nD    = zeros(nfiles,1);
 nvoid = zeros(nfiles,1);
 if showastable,
-    %fprintf('Filename,Npoints,Ninf&Nnan,%%Ninf&Nnan,mean,std,min,max,median,mode,sum\n')
+    fprintf('Filename,Npoints,Ninf&Nnan,%%Ninf&Nnan,mean,std,min,max,median,mode,sum\n')
     for a = 1:nfiles,
         
         % Read the file

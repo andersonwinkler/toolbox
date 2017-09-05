@@ -20,7 +20,7 @@ exit
 fi
 
 # Change below as needed.
-PALMPATH=/Users/winkler/toolbox/palm.git
+PALMPATH=/Users/winkler/tools/palm.git
 TEMPPATH=/tmp
 PUBLPATH=/Users/winkler/Dropbox/Public/outbox/palm/
 
