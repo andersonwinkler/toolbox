@@ -11,8 +11,7 @@ For the FEAT data, all the registration steps must have
 been run. For the FreeSurfer data, recon-all must have
 run until completion. 
 
-Usage: extractsignals -f <FEATdir> -o <out_prefix> \
-                     [-s <FSdir>] [-r] [-d]
+Usage: extractsignals -f <FEATdir> -o <out_prefix> [-s <FSdir>] [-r] [-d]
 
 -f : FEAT directory for this subject (*.feat).
 -o : Output prefix.
