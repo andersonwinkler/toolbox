@@ -11,8 +11,7 @@ For the FEAT data, all the registration steps must have
 been run. For the FreeSurfer data, recon-all must have
 run until completion. 
 
-Usage: extractsignals -f <FEATdir> -o <out_prefix> \
-                     [-s <FSdir>] [-r] [-d]
+Usage: extractsignals -f <FEATdir> -o <out_prefix> [-s <FSdir>] [-r] [-d]
 
 -f : FEAT directory for this subject (*.feat).
 -o : Output prefix.
@@ -65,7 +64,7 @@ if [[ "${FSDIR}" != "" ]] && [[ ! -e ${FSDIR} ]] ; then
 fi
 
 # Prepare a random string to save temporary files
-RND0=$(head -n 1 /dev/urandom | md5sum)
+RND0=$(head -n 1 /dev/urandom | shasum)
 RNDSTR=${RND0:0:12}
 
 # Define a function for Ctrl+C as soon as the RNDSTR is defined
