@@ -1,6 +1,9 @@
 .gitignore
-share/parula.m
+bin/.xdebug_tkmedit
+bin/.xdebug_tksurfer
 bin/palm_package
+share/abline.m
+share/parula.m
+.DS_Store
 bin/.DS_Store
 share/.DS_Store
-.DS_Store

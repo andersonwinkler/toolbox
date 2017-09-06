@@ -40,6 +40,10 @@ EOU
 exit 1
 fi
 
+#FS_STRUCT=orig
+FS_STRUCT=brainmask
+
+
 # Accept input arguments
 FSDIR=""
 FEATDIR=""
@@ -65,7 +69,7 @@ if [[ "${FSDIR}" != "" ]] && [[ ! -e ${FSDIR} ]] ; then
 fi
 
 # Prepare a random string to save temporary files
-RND0=$(head -n 1 /dev/urandom | md5sum)
+RND0=$(head -n 1 /dev/urandom | shasum)
 RNDSTR=${RND0:0:12}
 
 # Define a function for Ctrl+C as soon as the RNDSTR is defined
@@ -101,10 +105,10 @@ fi
 # Otherwise, run FAST on the FEAT highres and use WM and CSF partitions to create masks.
 if [[ "${FSDIR}" != "" ]] ; then
   echo "FreeSurfer file format conversions"
-  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${FSDIR}/mri/aparc+aseg.mgz ${OUT}_${RNDSTR}_aparc+aseg.nii.gz
-  ${FSLDIR}/bin/fslswapdim ${OUT}_${RNDSTR}_aparc+aseg RL PA IS ${OUT}_${RNDSTR}_aparc+aseg
-  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${FSDIR}/mri/brainmask.mgz ${OUT}_${RNDSTR}_brainmask.nii.gz
-  ${FSLDIR}/bin/fslswapdim ${OUT}_${RNDSTR}_brainmask RL PA IS ${OUT}_${RNDSTR}_brainmask
+  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${FSDIR}/mri/aparc+aseg.mgz   ${OUT}_${RNDSTR}_aparc+aseg.nii.gz
+  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${FSDIR}/mri/${FS_STRUCT}.mgz ${OUT}_${RNDSTR}_${FS_STRUCT}.nii.gz
+  ${FSLDIR}/bin/fslswapdim ${OUT}_${RNDSTR}_aparc+aseg   RL PA IS ${OUT}_${RNDSTR}_aparc+aseg
+  ${FSLDIR}/bin/fslswapdim ${OUT}_${RNDSTR}_${FS_STRUCT} RL PA IS ${OUT}_${RNDSTR}_${FS_STRUCT}
 
   echo "Generating the region masks"
   ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -mul 0 ${OUT}_${RNDSTR}_csf
@@ -127,9 +131,9 @@ if [[ "${FSDIR}" != "" ]] ; then
   ${FSLDIR}/bin/fslmaths   ${OUT}_${RNDSTR}_aparc+aseg -thr 16 -uthr 16 -bin -add ${OUT}_${RNDSTR}_brainstem ${OUT}_${RNDSTR}_brainstem
 
   echo "Registering masks"
-  MAT=${OUT}_${RNDSTR}_brainmask2example_func.mat
-  ${FSLDIR}/bin/flirt -in ${OUT}_${RNDSTR}_brainmask -ref ${FEATDIR}/reg/highres -omat ${OUT}_${RNDSTR}_braimask2highres.mat
-  ${FSLDIR}/bin/convert_xfm -omat ${MAT} -concat ${FEATDIR}/reg/highres2example_func.mat ${OUT}_${RNDSTR}_braimask2highres.mat
+  MAT=${OUT}_${RNDSTR}_${FS_STRUCT}2example_func.mat
+  ${FSLDIR}/bin/flirt -in ${OUT}_${RNDSTR}_${FS_STRUCT} -ref ${FEATDIR}/reg/highres -omat ${OUT}_${RNDSTR}_braimask2highres.mat
+  ${FSLDIR}/bin/convert_xfm -omat ${MAT} -concat ${FEATDIR}/reg/highres2example_func.mat  ${OUT}_${RNDSTR}_braimask2highres.mat
   ROILIST="csf wm callosum cerebellumwm brainstem"
   THR=0.8
 else

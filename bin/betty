@@ -2,11 +2,13 @@
 
 if [ -z "$1" ]; then
 cat <<EOU
-Run BET with bias correction.
+Run BET with bias correction or, if a 2nd argument is given,
+uses an FS-derived mask.
 
-Usage: betty <brain image>
+Usage: betty <brain image> [processed subject's FS dir]
 
 This script requires FSL properly installed and configured.
+If a 2nd argument is given, requires also FreeSurfer.
 
 _____________________________________
 Anderson M. Winkler
@@ -18,7 +20,30 @@ exit 1
 fi
 
 in=$(${FSLDIR}/bin/remove_ext $1)
-${FSLDIR}/bin/bet ${in} ${in}_braintmp -f 0.2
-${FSLDIR}/bin/fast -b --nopve ${in}_braintmp
-${FSLDIR}/bin/fslmaths ${in} -div ${in}_braintmp_bias ${in}_biascorrected
-${FSLDIR}/bin/bet ${in}_biascorrected ${in}_brain -f 0.3
+if [[ "${2}" == "" ]] ; then
+
+   # Run BET with bias correction.
+   ${FSLDIR}/bin/bet ${in} ${in}_braintmp -f 0.3
+   ${FSLDIR}/bin/fast -b --nopve ${in}_braintmp
+   ${FSLDIR}/bin/fslmaths ${in} -div ${in}_braintmp_bias ${in}_biascorrected
+   ${FSLDIR}/bin/bet ${in}_biascorrected ${in}_biascorrected_brain -f 0.5
+   ${FSLDIR}/bin/fslmaths ${in}_biascorrected_brain -bin -mul ${in} ${in}_brain
+   ${FSLDIR}/bin/imrm ${in}_braintmp
+   ${FSLDIR}/bin/imrm ${in}_braintmp_bias
+   ${FSLDIR}/bin/imrm ${in}_braintmp_seg
+
+else
+
+   # Don't run BET. Instead, use brainmask or the aseg.mgz to mask the input
+   FS_STRUCT=brainmask # maybe this could be aseg.mgz
+   fs=${2}
+   ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${fs}/mri/orig.mgz         ${in}_origtmp.nii.gz
+   ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii ${fs}/mri/${FS_STRUCT}.mgz ${in}_${FS_STRUCT}tmp.nii.gz
+   ${FSLDIR}/bin/fslswapdim ${in}_origtmp         RL PA IS ${in}_origtmp
+   ${FSLDIR}/bin/fslswapdim ${in}_${FS_STRUCT}tmp RL PA IS ${in}_${FS_STRUCT}tmp
+   ${FSLDIR}/bin/flirt -in  ${in}_origtmp         -ref ${in} -omat ${in}_orig2in.mat
+   ${FSLDIR}/bin/flirt -in  ${in}_${FS_STRUCT}tmp -ref ${in} -init ${in}_orig2in.mat -applyxfm -out ${in}_${FS_STRUCT}2intmp
+   ${FSLDIR}/bin/fslmaths   ${in}_${FS_STRUCT}2intmp -bin -mul ${in} ${in}_brain
+   ${FSLDIR}/bin/imrm ${in}_origtmp ${in}_${FS_STRUCT}tmp ${in}_${FS_STRUCT}2intmp
+   rm ${in}_orig2in.mat
+fi
