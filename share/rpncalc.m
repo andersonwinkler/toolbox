@@ -12,7 +12,7 @@ function rpncalc(varargin)
 %   Multiplicative (matrix): **, //, \\ and ^^
 %   Logic: <, >, <=. >=, ==, ~=
 %   Comparisons: min, max
-% Mathematical operators (unary): log, ln, exp
+% Mathematical operators (unary): log, ln, exp, isnan, isinf
 % Stack manipulation: swap dup drop
 % File operations: load save
 %
@@ -28,46 +28,50 @@ function rpncalc(varargin)
 % Nov/2014 (this version)
 % http://brainder.org
 
-% Do the OCTAVE stuff, with TRY to ensure MATLAB compatibility
-try %#ok
-    % Get the inputs
-    varargin = argv();
-    
+% Check if Octave or Matlab
+if exist('OCTAVE_VERSION','builtin') ~= 0,
+
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
-    
-    % Print usage if no inputs are given
-    if isempty(varargin) || strcmp(varargin{1},'-q'),
-        fprintf('Do some simple calculations using RPN notation.\n');
-        fprintf('\n');
-        fprintf('Accepted inputs are file names for DPV/DPF files, for\n');
-        fprintf('CSV files, and for Matlab/Octave MAT files containing at most\n');
-        fprintf('one variable inside.\n');
-        fprintf('\n');
-        fprintf('The current operators available are:\n');
-        fprintf('Mathematical operators (binary):\n');
-        fprintf('  Additive: +, -\n');
-        fprintf('  Multiplicative (elementwise): *, /, and ^\n');
-        fprintf('  Multiplicative (matrix): **, //, \\\\ and ^^\n');
-        fprintf('  Logic: <, >, <=. >=, ==, ~=\n');
-        fprintf('  Comparisons: min, max\n');
-        fprintf('Mathematical operators (unary): log, ln, exp\n');
-        fprintf('Stack manipulation: swap dup drop\n');
-        fprintf('File operations: load save\n');
-        fprintf('\n');
-        fprintf('All inputs must be strings (so, delimited with quotes '''')\n');
-        fprintf('\n');
-        fprintf('Vertex coordinates (for DPV) or the face indices (for DPF)\n');
-        fprintf('will be the same as for the last DPV/DPF file loaded.\n');
-        fprintf('\n');
-        fprintf('_____________________________________\n');
-        fprintf('Anderson M. Winkler\n');
-        fprintf('Yale University / Institute of Living\n');
-        fprintf('Jun/2011 (first version)\n');
-        fprintf('Nov/2014 (this version)\n');
-        fprintf('http://brainder.org\n');
-        return;
+
+    % Get the inputs
+    if isempty(varargin),
+        varargin = argv();
     end
+ 
+end
+
+% Print usage if no inputs are given
+if isempty(varargin) || strcmp(varargin{1},'-q'),
+    fprintf('Do some simple calculations using RPN notation.\n');
+    fprintf('\n');
+    fprintf('Accepted inputs are file names for DPV/DPF files, for\n');
+    fprintf('CSV files, and for Matlab/Octave MAT files containing at most\n');
+    fprintf('one variable inside.\n');
+    fprintf('\n');
+    fprintf('The current operators available are:\n');
+    fprintf('Mathematical operators (binary):\n');
+    fprintf('  Additive: +, -\n');
+    fprintf('  Multiplicative (elementwise): *, /, and ^\n');
+    fprintf('  Multiplicative (matrix): **, //, \\\\ and ^^\n');
+    fprintf('  Logic: <, >, <=. >=, ==, ~=\n');
+    fprintf('  Comparisons: min, max\n');
+    fprintf('Mathematical operators (unary): log, ln, exp, isnan, isinf\n');
+    fprintf('Stack manipulation: swap dup drop\n');
+    fprintf('File operations: load save\n');
+    fprintf('\n');
+    fprintf('All inputs must be strings (so, delimited with quotes '''')\n');
+    fprintf('\n');
+    fprintf('Vertex coordinates (for DPV) or the face indices (for DPF)\n');
+    fprintf('will be the same as for the last DPV/DPF file loaded.\n');
+    fprintf('\n');
+    fprintf('_____________________________________\n');
+    fprintf('Anderson M. Winkler\n');
+    fprintf('Yale University / Institute of Living\n');
+    fprintf('Jun/2011 (first version)\n');
+    fprintf('Nov/2014 (this version)\n');
+    fprintf('http://brainder.org\n');
+    return;
 end
 
 % More OCTAVE stuff
@@ -212,6 +216,22 @@ for a = 1:nargin,
         % Compute the log of the 1st element in the stack
         fprintf('Exponentiating.\n')
         stack{1} = exp(stack{1});
+
+    elseif strcmpi('isnan',varargin{a});
+        
+        % ISNAN
+        
+        % Check whether it's NaN
+        fprintf('Checking if it is NaN.\n')
+        stack{1} = isnan(stack{1});
+
+    elseif strcmpi('isinf',varargin{a});
+        
+        % ISINF
+        
+        % Check whether it's Inf
+        fprintf('Checking if it is Inf.\n')
+        stack{1} = isinf(stack{1});
         
     elseif strcmpi('swap',varargin{a});
         
