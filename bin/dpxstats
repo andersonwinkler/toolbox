@@ -1,4 +1,4 @@
-#!/opt/local/bin/octave -q
+#!/usr/bin/env octave -q
 % function dpxstats(varargin)
 % Display some statistics for a DPF or DPV file.
 % If more than one file is specified, and if all contain

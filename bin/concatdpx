@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/env octave -q
 % function concatdpx(varargin)
 % Read a set of DPV or DPF files and save as a single, large CSV
 % table, containing one face or vertex per line and one the data

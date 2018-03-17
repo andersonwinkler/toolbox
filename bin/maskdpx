@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/env octave -q
 # function maskdpx(varargin)
 % Masks out the 'unknown' region from a DPV/DPF file
 % replacing its original values by a given new value

@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/env octave -q
 % function dpxlabelling(varargin)
 % Take a binary DPX file (DPV or DPF) and a surface file (SRF)
 % and label contiguous vertices (DPV) or faces (DPF).

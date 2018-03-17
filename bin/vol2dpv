@@ -1,4 +1,4 @@
-#!/opt/local/bin/octave -q
+#!/usr/bin/env octave -q
 % function vol2dpv(varargin)
 % Project the values from a volume into a surface. Each vertex
 % of the surface receives the value from the closest voxel from

@@ -1,4 +1,4 @@
-#!/opt/local/bin/octave -q
+#!/usr/bin/env octave -q
 % function srf2vol(varargin)
 % Compute the volume per face or per vertex for a pair of ASCII surface
 % files and save as a DPV or DPF (aka curvature) file.

@@ -1,4 +1,4 @@
-#!/opt/local/bin/octave -q
+#!/usr/bin/env octave -q
 % function applymat2srf(varargin)
 % Apply a 4x4 affine matrix to a surface file.
 % 
