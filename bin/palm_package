@@ -22,7 +22,7 @@ fi
 # Change below as needed.
 PALMPATH=/Users/winkler/tools/palm.git
 TEMPPATH=/tmp
-PUBLPATH=/Users/winkler/Dropbox/Public/outbox/palm/
+PUBLPATH=~winkler/Dropbox/AWS/andersonwinkler/palm
 
 echo "Creating directory for the new package."
 ver=$(cat ${PALMPATH}/palm_version.txt | awk '{print $NF}' | awk -v "FS=)" '{print $1}')
@@ -37,11 +37,11 @@ gnutar czf ${TEMPPATH}/palm-${ver}.tar.gz -C${TEMPPATH} palm-${ver} --exclude=".
 echo "Copying to the public directory."
 mv -i ${TEMPPATH}/palm-${ver}.tar.gz ${PUBLPATH}
 
-echo "Copying to jalapeno."
-scp -r ${TEMPPATH}/palm-${ver} winkler@jalapeno.fmrib.ox.ac.uk:~/
+echo "Syncing to AWS S3"
+aws s3 sync ${PUBLPATH} s3://andersonwinkler/palm
 
-echo "Updating symlink."
-ssh winkler@jalapeno.fmrib.ox.ac.uk "ln -sf ~/palm-${ver} ~/palm"
+echo "Copying to jalapeno."
+#scp -r ${TEMPPATH}/palm-${ver} winkler@jalapeno.fmrib.ox.ac.uk:~/
 
 echo "Removing temporary files."
 rm -rf ${TEMPPATH}/palm-${ver}

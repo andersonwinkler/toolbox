@@ -16,6 +16,7 @@ The options are:
 -c             : Run also for curv.
 -u             : Run also for sulc.
 -t             : Run also for thickness.
+-y             : Run also for the myelin maps.
 -v             : Run also for volumes (aseg + overlaid surfaces).
 
 * Important: This script requires ImageMagick (command 'convert'), and
@@ -42,12 +43,12 @@ do
       s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
       l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
       m) MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
-      p) PARC_LIST="${PARC_LIST} ${OPTARG}" ;;
+      p) PARC_LIST="${PARC_LIST} ${OPTARG}" ; DOSURF="Y" ;;
       d) HTML_DIR="${OPTARG}" ;;
       c) DOSURF="Y" ; DOCURV="Y" ; PARC_LIST="${PARC_LIST} curv" ;;
       u) DOSURF="Y" ; DOSULC="Y" ; PARC_LIST="${PARC_LIST} sulc" ;;
       t) DOSURF="Y" ; DOTHCK="Y" ; PARC_LIST="${PARC_LIST} thickness" ;;
-      t) DOSURF="Y" ; DOMYEL="Y" ; PARC_LIST="${PARC_LIST} myelin" ;;
+      y) DOSURF="Y" ; DOMYEL="Y" ; PARC_LIST="${PARC_LIST} myelin" ;;
       v) DOASEG="Y" ;;
    esac
 done
