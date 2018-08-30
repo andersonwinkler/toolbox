@@ -56,6 +56,7 @@ fi
 
 # For each subject
 for subj in ${SBJLIST} ; do
+  echo "Working on subject ${subj}"
 
   # Convert from MGZ to NIFTI
   ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
@@ -66,10 +67,13 @@ for subj in ${SBJLIST} ; do
                        ${SUBJECTS_DIR}/${subj}/tmp/aseg.nii.gz
 
   # Segment
+  echo "- Segmenting with FAST."
   ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/tmp/brainmask
   
   # Create separate volumes for each label
-  LABLIST=$(awk '/^[^#]/ {print $2}' ${SUBJECTS_DIR}/${subj}/aseg.stats)
+  LABLIST=$(awk '/^[^#]/ {print $2}' ${SUBJECTS_DIR}/${subj}/stats/aseg.stats)
+  LABNAMES=$(awk 'BEGIN { ORS="," } /^[^#]/ {print $5}' ${SUBJECTS_DIR}/${subj}/stats/aseg.stats)
+  hdr="subject,${LABNAMES%?}"
   for lab in ${LABLIST} ; do
       ${FSLDIR}/bin/fslmaths ${SUBJECTS_DIR}/${subj}/tmp/aseg \
                              -thr ${lab} -uthr ${lab} -bin \
@@ -78,14 +82,16 @@ for subj in ${SBJLIST} ; do
   
   # Compute the partial volumes
   for pve in 0 1 2 ; do
-    rm -f ${PREFIX}_${pve}.csv
-    M="${subj},"
+  echo "- Working on tissue class ${pve}."
+    echo ${hdr} > ${PREFIX}_${pve}.csv
+    M="${subj}"
     for lab in ${LABLIST} ; do
-      m=$(${FSLDIR}/bin/fslstats -k ${SUBJECTS_DIR}/${subj}/tmp/aseg_${lab} \
-                       ${SUBJECTS_DIR}/${subj}/tmp/brainmask_pve_${pve} ${m})
+      m=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/tmp/brainmask_pve_${pve} \
+                              -k ${SUBJECTS_DIR}/${subj}/tmp/aseg_${lab} -m)
       M="${M},${m//[[:blank:]]/}"
     done
     echo ${M} >> ${PREFIX}_${pve}.csv
   done
   ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/brainmask* ${SUBJECTS_DIR}/${subj}/tmp/aseg*
 done
+echo "Done!"
