@@ -28,11 +28,13 @@ def printHelp(argv): # ========================================================
     print("")
     print("Files are reorganized (moved) into echo_####.")
     print("")
-    print("This script requires PyDICOM (https://github.com/pydicom/pydicom).")
+    print("This script requires:")
+    print(" - PyDICOM (https://github.com/pydicom/pydicom)")
+    print(" - Chris Rorden's dcm2niix")
     print("")
-    print("Originally written by Vinai Roopchansingh (NIH/NIMH/FMRIF) in 2013.01.31")
-    print("Updated to use PyDICOM by Vinai Roopchansingh in 2018.03.26.")
-    print("This version adapted to EDB by Anderson Winkler (NIH/NIMH/BSD) in 2018.08.09.")
+    print("Originally written by Vinai Roopchansingh (NIH/NIMH/FMRIF) on 2013.01.31")
+    print("Updated to use PyDICOM by Vinai Roopchansingh on 2018.03.26.")
+    print("This version adapted to EDB by Anderson Winkler (NIH/NIMH/BSD) on 2018.08.09.")
     print("")
     print("_____________________________________")
     print("Anderson M. Winkler")
@@ -182,7 +184,7 @@ def sortMultiEcho(allFileNames): # ============================================
 
 def convertToNifti(dirName, niftiName, # ======================================
                    EchoTime=None, AcqDateTime=None, MoveFile=False): 
-    cmd = "module load dcm2niix ; dcm2niix -z y -b y -ba y -f %s %s" % (niftiName, dirName)
+    cmd = "dcm2niix -z y -b y -ba y -f %s %s" % (niftiName, dirName)
     print("Converting to NIFTI.")
     print("Running the following command:\n%s" % cmd)
     status = os.system(cmd)
@@ -205,7 +207,7 @@ def convertToNifti(dirName, niftiName, # ======================================
         sys.exit("Error: Conversion to NIFTI failed.")
 
 def convertToBrik(dirName): # =================================================
-    cmd  = "module load afni ; Dimon -infile_pattern \"%s/*.%s\" -gert_create_dataset -quiet -gert_to3d_prefix %s" % (dirName, fileExt, dirName)
+    cmd  = "Dimon -infile_pattern \"%s/*.%s\" -gert_create_dataset -quiet -gert_to3d_prefix %s" % (dirName, fileExt, dirName)
     print("Converting to HEAD/BRIK.")
     print("Running the following command:\n%s" % cmd)
     status = os.system(cmd)
