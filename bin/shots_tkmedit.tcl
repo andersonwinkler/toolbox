@@ -24,6 +24,10 @@ SetCursor 0 128 128 068
 RedrawScreen
 set tiff "$outpth/$env(SUBJECT_NAME)_surfaces_cor068.tif"
 SaveTIFF $tiff
+SetCursor 0 128 128 068
+RedrawScreen
+set tiff "$outpth/$env(SUBJECT_NAME)_surfaces_cor068.tif"
+SaveTIFF $tiff
 SetCursor 0 128 128 088
 RedrawScreen
 set tiff "$outpth/$env(SUBJECT_NAME)_surfaces_cor088.tif"

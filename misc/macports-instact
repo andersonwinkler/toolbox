@@ -1,0 +1,22 @@
+#!/bin/bash
+# Installs ports even if there are files that don't belong to a 
+# registered port are present (e.g., if modules have been installed
+# outside official ports, then the official ones are tried to be
+# installed. Typical Python scenario...
+
+if [ "$EUID" -ne 0 ]
+  then echo "Please run as root"
+  exit
+fi
+target="$1"
+while [ 1 ]
+do
+    echo trying to install "$target"
+    if [[ $(port installed "$target" | grep "$target") ]]; then echo "$target" present; break; fi
+    line=`port install "$target" 2>&1 > /dev/tty | grep "port -f activate"`
+    package=$(echo $line | sed -e "s/^.*port -f activate //" -e "s/. .*//")
+    if [ "$package" = "$oldpackage" ]; then echo double \""$package"\"; break; fi
+    oldpackage="$package"
+    echo activating "$package"
+    port -f activate "$package"
+done

@@ -43,7 +43,7 @@ do
       s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
       l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
       m) MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
-      p) PARC_LIST="${PARC_LIST} ${OPTARG}" ;;
+      p) PARC_LIST="${PARC_LIST} ${OPTARG}" ; DOSURF="Y" ;;
       d) HTML_DIR="${OPTARG}" ;;
       c) DOSURF="Y" ; DOCURV="Y" ; PARC_LIST="${PARC_LIST} curv" ;;
       u) DOSURF="Y" ; DOSULC="Y" ; PARC_LIST="${PARC_LIST} sulc" ;;

@@ -37,8 +37,8 @@ DOTHCK="N"
 while getopts 's:l:m:p:cutyv' OPTION
 do
   case ${OPTION} in
-    s) DOSURF="Y" ; SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
-    l) DOSURF="Y" ; SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
+    s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
+    l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
     m) DOSURF="Y" ; MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
     p) DOSURF="Y" ; PARC_LIST="${PARC_LIST} ${OPTARG}" ;;
     c) DOSURF="Y" ; DOCURV="Y" ;;

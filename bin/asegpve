@@ -1,0 +1,97 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Compute the sum of partial volume effects for GM, WM, and CSF, for each
+of the regions of FreeSurfer's subcortical segmentation.
+
+Both FSL and FreeSurfer are necessary. Make sure your variables
+\$FSLDIR, \$FREESURFER_HOME and \$SUBJECTS_DIR have been configured.
+
+Usage: asegpve -s <subjid> [-p <prefix>]
+
+-s <subjid>   : Subject (already processed with recon-all). More than
+                one can be supplied with multiple -s.
+-p <prefix>   : File prefix for the outputs. Files will be named
+                "{prefix}_{class}.csv", where {class} can be
+                0, 1 or 2, for gm, wm, or csf respectively.
+                Default is simply "./prefix"
+
+_____________________________________
+Anderson M. Winkler
+National Institutes of Health (NIH/NIMH)
+Aug/2018
+http://brainder.org
+EOU
+exit 1
+fi
+
+# Check and accept the input arguments
+SBJLIST=""
+PREFIX="output"
+while getopts 's:p:' OPTION
+do
+  case ${OPTION} in
+    s) SBJLIST=$( [[ -f ${OPTARG} ]] && cat ${OPTARG} || echo "${SBJLIST} ${OPTARG}" ) ;;
+    p) PREFIX=${OPTARG} ;;
+  esac
+done
+
+# Check early on if crucial files are missing
+MISS="N"
+for subj in ${SBJLIST} ; do
+  for f in ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz \
+           ${SUBJECTS_DIR}/${subj}/mri/aseg.mgz \
+           ${SUBJECTS_DIR}/${subj}/stats/aseg.stats ; do
+    if [[ ! -f ${f} ]] ; then
+      echo "File not found: ${f}"
+      MISS="Y"
+    fi
+  done
+done
+if [[ "${MISS}" == "Y" ]] ; then
+  echo "Error: Cannot continue due to files missing as above."
+  exit 1
+fi
+
+# For each subject
+for subj in ${SBJLIST} ; do
+  echo "Working on subject ${subj}"
+
+  # Convert from MGZ to NIFTI
+  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+                       ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz \
+                       ${SUBJECTS_DIR}/${subj}/tmp/brainmask.nii.gz
+  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+                       ${SUBJECTS_DIR}/${subj}/mri/aseg.mgz \
+                       ${SUBJECTS_DIR}/${subj}/tmp/aseg.nii.gz
+
+  # Segment
+  echo "- Segmenting with FAST."
+  ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/tmp/brainmask
+  
+  # Create separate volumes for each label
+  LABLIST=$(awk '/^[^#]/ {print $2}' ${SUBJECTS_DIR}/${subj}/stats/aseg.stats)
+  LABNAMES=$(awk 'BEGIN { ORS="," } /^[^#]/ {print $5}' ${SUBJECTS_DIR}/${subj}/stats/aseg.stats)
+  hdr="subject,${LABNAMES%?}"
+  for lab in ${LABLIST} ; do
+      ${FSLDIR}/bin/fslmaths ${SUBJECTS_DIR}/${subj}/tmp/aseg \
+                             -thr ${lab} -uthr ${lab} -bin \
+                             ${SUBJECTS_DIR}/${subj}/tmp/aseg_${lab}
+  done
+  
+  # Compute the partial volumes
+  for pve in 0 1 2 ; do
+  echo "- Working on tissue class ${pve}."
+    echo ${hdr} > ${PREFIX}_${pve}.csv
+    M="${subj}"
+    for lab in ${LABLIST} ; do
+      m=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/tmp/brainmask_pve_${pve} \
+                              -k ${SUBJECTS_DIR}/${subj}/tmp/aseg_${lab} -m)
+      M="${M},${m//[[:blank:]]/}"
+    done
+    echo ${M} >> ${PREFIX}_${pve}.csv
+  done
+  ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/brainmask* ${SUBJECTS_DIR}/${subj}/tmp/aseg*
+done
+echo "Done!"
