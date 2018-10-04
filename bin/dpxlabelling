@@ -1,16 +1,17 @@
-#!/usr/bin/env octave -q
-% function dpxlabelling(varargin)
+#!/usr/bin/octave -q
+% function dpxlab = dpxlabelling(varargin)
 % Take a binary DPX file (DPV or DPF) and a surface file (SRF)
 % and label contiguous vertices (DPV) or faces (DPF).
 %
 % Usage:
-% dpxlabelling(dpxfile,srffile,dpxsave)
+% dpxlab = dpxlabelling(dpxfile,srffile,dpxsave)
 %
 % dpxfile : File to be labelled, in ASCII format (DPF/DPV)
 % srffile : Surface file, from where the geometry information
 %           is taken
-% dpxsave : File to be created containing the labelled
-%           vertex or face clusters.
+% dpxsave : (Optional) File to be created containing the
+%           labelled vertex or face clusters.
+% dpxlab  : Variable with the labeled clusters.
 %
 % _____________________________________
 % Anderson M. Winkler
@@ -22,12 +23,13 @@
 try
     % Get the inputs
     varargin = argv();
-    
+    nargin = numel(varargin);
+ 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
     
     % Print usage if no inputs are given
-    if isempty(varargin) || strcmp(varargin{1},'-q'),
+    if isempty(varargin) || strcmp(varargin{1},'-q')
         fprintf('Take a binary DPX file (DPV or DPF) and a surface file (SRF)\n');
         fprintf('and label contiguous vertices (DPV) or faces (DPF).\n');
         fprintf('\n');
@@ -50,7 +52,7 @@ try
 end
 
 % Accept arguments
-if nargin ~= 3,
+if nargin < 3
     error('Invalid number of arguments')
 end
 
@@ -66,7 +68,7 @@ nF = size(fac,1);
 % Labelled mask
 dpxl = zeros(size(dpx));
 
-if nX == nV, % vertexwise data
+if nX == nV % vertexwise data
     fprintf('Working with vertexwise data.\n');
     
     % Identify faces that are entirely (3 vertices)
@@ -77,15 +79,15 @@ if nX == nV, % vertexwise data
     
     % For each face
     k = 1; % label indices (to be incremented)
-    for f = find(faci)',
+    for f = find(faci)'
         flab = sort(dpxl(fac(f,:)));
-        if flab(3) == 0,
+        if flab(3) == 0
             dpxl(fac(f,:)) = k;
         else
-            if flab(2) ~= 0;
+            if flab(2) ~= 0
                 dpxl(dpxl == flab(2)) = flab(3);
             end
-            if flab(1) ~= 0;
+            if flab(1) ~= 0
                 dpxl(dpxl == flab(1)) = flab(3);
             end
             dpxl(fac(f,:)) = flab(3);
@@ -93,7 +95,7 @@ if nX == nV, % vertexwise data
         k = k + 1;
     end
     
-elseif nX == nF,  % facewise data %%% NOT TESTED YET %%%
+elseif nX == nF  % facewise data %%% NOT TESTED YET %%%
     fprintf('Working with facewise data.\n');
     
     % Ignore faces that are not in the mask
@@ -101,7 +103,7 @@ elseif nX == nF,  % facewise data %%% NOT TESTED YET %%%
     
     % For each face
     k = 1; % label indices (to be incremented)
-    for f = find(dpx)',
+    for f = find(dpx)'
         
         % Find other faces that share 2 vtx (1 edge)
         neifacidx = ...
@@ -110,13 +112,13 @@ elseif nX == nF,  % facewise data %%% NOT TESTED YET %%%
             facm == fac(f,3);
         neifacidx = sum(neifacidx,2) >= 2; % only 2+ shared vertices, not 1
         numneigh  = sum(neifacidx); % number of neighbours
-        if numneigh > 1, % if not isolated face
+        if numneigh > 1 % if not isolated face
             flab = sort(dpxl(neifacidx));
-            if flab(numneigh) == 0,
+            if flab(numneigh) == 0
                 dpxl(neifacidx) = k;
             else
-                for n = numneigh:-1:1,
-                    if flab(n) ~= 0,
+                for n = numneigh:-1:1
+                    if flab(n) ~= 0
                         dpxl(dpxl == flab(n)) = flab(numneigh);
                     end
                 end
@@ -136,18 +138,19 @@ dpxu = unique(dpxl);
 dpxu(dpxu == 0) = [];
 nC = numel(dpxu);
 sizes = zeros(nC,1);
-for l = 1:nC,
+for l = 1:nC
     sizes(l) = sum(dpxl == dpxu(l));
 end
 [~,idxs] = sort(sizes,'descend');
 dpxu = dpxu(idxs);
 
 % Relabel starting from 1
-dpxl2 = zeros(size(dpxl));
-for l = 1:nC,
-    dpxl2(dpxl == dpxu(l)) = l;
+dpxlab = zeros(size(dpxl));
+for l = 1:nC
+    dpxlab(dpxl == dpxu(l)) = l;
 end
 
 % Save results
-dpxwrite(varargin{3},dpxl2,crd,idx);
-
+if nargin == 3
+    dpxwrite(varargin{3},dpxlab,crd,idx);
+end
