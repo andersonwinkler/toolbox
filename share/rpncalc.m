@@ -35,10 +35,9 @@ if exist('OCTAVE_VERSION','builtin') ~= 0,
     sigterm_dumps_octave_core(0);
 
     % Get the inputs
-    if isempty(varargin),
-        varargin = argv();
-    end
- 
+    varargin = argv();
+    nargin = numel(varargin);
+
 end
 
 % Print usage if no inputs are given
@@ -75,7 +74,6 @@ if isempty(varargin) || strcmp(varargin{1},'-q'),
 end
 
 % More OCTAVE stuff
-nargin = numel(varargin);
 
 % Define the operators
 opadd   = {'+','-'};

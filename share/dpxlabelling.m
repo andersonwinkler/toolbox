@@ -23,6 +23,7 @@ function dpxlab = dpxlabelling(varargin)
 try
     % Get the inputs
     varargin = argv();
+    nargin = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
