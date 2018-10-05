@@ -1,4 +1,4 @@
-#!/usr/local/apps/octave/4.0.2/bin/octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function slicetiming(varargin)
 % Run slice timing correction using the algorithm originally from 
 % Geoffrey Aguirre and Eric Zarahn, later integrated into SPM.
@@ -152,9 +152,6 @@ for z = 1:nZ,
         O.data(:,:,z,v) = slices(:,:,v);
     end
 end
-
-O.extra.hdr.xyzt_units = 10;
-O.extra.hdr.pixdim(5) = TR;
 
 % Save to disk:
 palm_miscwrite(O);

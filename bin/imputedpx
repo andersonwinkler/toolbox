@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function imputedpx(varargin)
 % Impute values for missing vertices or faces of a
 % DPX (DPV or DPF) file. The vertices or faces that
@@ -23,7 +23,7 @@
 %              'hot-deck'  : Picks a random value from
 %                            anywhere in the DPX file, with
 %                            no regard for neighbourhood.
-% - srffile  : For the 'average' and 'neighbour' methods.
+% - srffile  : For the 'average' and 'nearest' methods.
 %              This is the surface file (*.srf) that will
 %              be used as reference to identify the
 %              neighbours.
@@ -68,7 +68,7 @@ try
         fprintf('             ''hot-deck''  : Picks a random value from\n');
         fprintf('                           anywhere in the DPX file, with\n');
         fprintf('                           no regard for neighbourhood.\n');
-        fprintf('- srffile  : For the ''average'' and ''neighbour'' methods.\n');
+        fprintf('- srffile  : For the ''average'' and ''nearest'' methods.\n');
         fprintf('             This is the surface file (*.srf) that will\n');
         fprintf('             be used as reference to identify the\n');
         fprintf('             neighbours.\n');
@@ -98,7 +98,6 @@ nargin = numel(varargin);
 for a = 1:nargin,
     vr.(fields{a}) = varargin{a};
 end
-if ischar(vr.missval), vr.missval = str2num(vr.missval); end
 
 % Read DPX and mask files
 [dpx,crd,idx] = dpxread(vr.dpxin);
@@ -115,14 +114,8 @@ end
 dpxi = dpx; % for the imputation
 
 % Index and number of missing values
-if isnan(vr.missval),
-    imiss = isnan(dpx) & msk;
-elseif isinf(vr.missval),
-    imiss = isinf(dpx) & msk;
-else
-    imiss = (dpx == vr.missval) & msk;
-end
-nmiss = sum(imiss)
+imiss = (dpx == vr.missval) & msk;
+nmiss = sum(imiss);
 
 % Switch methods
 if strcmpi(vr.method,'hot-deck'),

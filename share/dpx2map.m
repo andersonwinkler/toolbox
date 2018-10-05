@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpx2map(varargin)
 % Generate a surface map of data stored as DPV or DPF, using a custom
 % colourscale. The result is saved as either OBJ/MTL pair or PLY, and

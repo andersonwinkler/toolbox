@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function vol2dpv(varargin)
 % Project the values from a volume into a surface. Each vertex
 % of the surface receives the value from the closest voxel from
@@ -26,14 +26,13 @@
 try
     % Get the inputs
     varargin = argv();
-    nargin = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
 
     % Disable annoying warning in FS
     %warning ('off','Octave:divide-by-zero');
-
+    
     % Print usage if no inputs are given
     if isempty(varargin) || strcmp(varargin{1},'-q'),
         fprintf('Project the values from a volume into a surface. Each vertex\n');
@@ -60,7 +59,7 @@ try
         return;
     end
 end
-
+nargin = numel(varargin);
 
 % Check number of arguments
 if nargin < 2 || nargin > 4,
@@ -139,8 +138,8 @@ dpv = zeros(nV,1);
 for v = 1:nV,
     
     % Select the voxels of interest
-    vbox = vol(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
-    mbox = msk(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
+    vbox = vol (flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
+    mbox = msk (flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
     xbox = volx(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
     ybox = voly(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));
     zbox = volz(flo(v,1):cei(v,1),flo(v,2):cei(v,2),flo(v,3):cei(v,3));

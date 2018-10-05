@@ -1,4 +1,3 @@
-%#!/usr/bin/octave -q
 function splitsrf(varargin)
 % Split a surface according to the labels given by a DPF/DPV file
 %

@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpx2fdr(varargin)
 % For a set of DPV/DPF files containing p-values, return the
 % FDR threshold (single value) and the FDR corrected and FDR-adjusted

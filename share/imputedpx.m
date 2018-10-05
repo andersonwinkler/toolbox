@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function imputedpx(varargin)
 % Impute values for missing vertices or faces of a
 % DPX (DPV or DPF) file. The vertices or faces that

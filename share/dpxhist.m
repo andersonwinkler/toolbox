@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpxhist(varargin)
 % Generate a histogram for a combined set of DPV/DPF files,
 % ignoring NaN/Inf values. The result is saved to a PNG file.

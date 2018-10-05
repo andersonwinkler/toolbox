@@ -1,4 +1,3 @@
-%#!/usr/bin/octave -q
 function splitdpx(varargin)
 % Split a DPV/DPF file according to the labels given by another
 % DPF/DPV file

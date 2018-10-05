@@ -1,4 +1,3 @@
-%#!/usr/bin/octave -q
 function dpv2png(varargin)
 % Converts an ASCII Curvature/Surface pair into a PNG file.
 %

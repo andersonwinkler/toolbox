@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function avgsrf(varargin)
 % Compute an average surface file.
 % 

@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function applyolp(varargin)
 % Produces an interpolated DPF file when the overlapping
 % geometries source and target spheres (OLP table) are known.

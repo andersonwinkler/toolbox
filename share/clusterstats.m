@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function clusterstats(varargin)
 % Extract the sum or mean for the vertices or faces
 % of a DPX file, masked by a DPX file that defines

@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function dpx2fdr(varargin)
 % For a set of DPV/DPF files containing p-values, return the
 % FDR threshold (single value) and the FDR corrected and FDR-adjusted
@@ -76,7 +76,7 @@ crd = cell(nargin-1,1);
 idx = cell(nargin-1,1);
 nX = zeros(nargin-1,1);
 for a = 1:nargin-1,
-    [tmp,crd{a},idx{a}] = crvread(varargin{a+1});
+    [tmp,crd{a},idx{a}] = dpxread(varargin{a+1});
     dpx = [dpx; tmp];
     nX(a) = numel(tmp);
 end
@@ -124,10 +124,10 @@ for a = 1:nargin-1,
     [fpth,fnam,fext] = fileparts(varargin{a+1});
     % FDR-corrected
     tmp = cor(acum+1:acum+nX(a));
-    crvwrite(fullfile(fpth,sprintf('%s-cor%s',fnam,fext)),tmp,crd{a},idx{a});
+    dpxwrite(fullfile(fpth,sprintf('%s-cor%s',fnam,fext)),tmp,crd{a},idx{a});
     % FDR-adjusted
     tmp = adj(acum+1:acum+nX(a));
-    crvwrite(fullfile(fpth,sprintf('%s-adj%s',fnam,fext)),tmp,crd{a},idx{a});
+    dpxwrite(fullfile(fpth,sprintf('%s-adj%s',fnam,fext)),tmp,crd{a},idx{a});
     % Increment cumulant
     acum = acum+nX(a);
 end

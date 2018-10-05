@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function slicetiming(varargin)
 % Run slice timing correction using the algorithm originally from 
 % Geoffrey Aguirre and Eric Zarahn, later integrated into SPM.

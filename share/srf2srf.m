@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function srf2srf(varargin)
 % Resample an ASCII DPV or DPF file with a geometry given by a source surface
 % file to another DPV or DPF file using the geometry of a target surface.

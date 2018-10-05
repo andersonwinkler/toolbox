@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function midsrf(srf1,srf2,srfout)
 % Given two surface files, compute the mid-surface
 % between them. To be valid, both surfaces must have 

@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpxlab = dpxlabelling(varargin)
 % Take a binary DPX file (DPV or DPF) and a surface file (SRF)
 % and label contiguous vertices (DPV) or faces (DPF).

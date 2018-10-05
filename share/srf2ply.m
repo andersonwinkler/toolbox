@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function srf2ply(varargin)
 % Convert Surface ASCII format to PLY.
 % 

@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function dpx2mgh(varargin)
 % Concatenates several DPX (DPF or DPV) files into a
 % single MGH file, with each DPX file represented as
@@ -65,9 +65,9 @@ end
 
 % For each input dpx file:
 for a = 2:nargin,
-
-    % Print some feedback:
-    fprintf('Working on (%d/%d): %s\n',a-1,nargin-1,varargin{a});
+    
+    % Some feedback in the screen:
+    fprintf('Working on: %s\n',varargin{a});
     
     % Load it:
     dpx = dpxread(varargin{a});
@@ -83,4 +83,5 @@ end
 
 % Save. Note that FreeSurfer must be installed and the
 % directory ${FREESURFER}/matlab must be in the path.
+fprintf('Saving results to %s\n',varargin{1});
 save_mgh(mgh,varargin{1},eye(4));

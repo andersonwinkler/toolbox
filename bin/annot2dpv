@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function annot2dpv(varargin)
 % Convert an annotation file to a DPV file.
 %

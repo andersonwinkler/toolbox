@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function permutise(datafile,mtxfile,confile,outprefix,outextens,nP)
 % Fit a model and compute p-values based on permutation.
 %

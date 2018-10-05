@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpxthr(varargin)
 % Threshold a DPX file (DPV/DPF) according to a relative
 % value (percentile). The output is a binary (0-1) file

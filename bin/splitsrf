@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function splitsrf(varargin)
 % Split a surface according to the labels given by a DPF/DPV file
 %
@@ -11,7 +11,7 @@
 %             set of vertices (e.g., one per hemi).
 % srfprefix : File prefix (may include path) to create the new surfaces.
 %
-% The program outputs also a text file containing named
+% If labels are given, it outputs also a text file containing named
 % [ srfprefix '.index.csv' ] containing the correspondence between file
 % names and the values in the original labels.
 %
@@ -42,7 +42,7 @@ try
         fprintf('            set of vertices (e.g., one per hemi).\n');
         fprintf('srfprefix : File prefix (may include path) to create the new surfaces.\n');
         fprintf('\n');
-        fprintf('The program outputs also a text file containing named\n');
+        fprintf('If labels are given, it outputs also a text file containing named\n');
         fprintf('${srfprefix}.index.csv containing the correspondence between file\n');
         fprintf('names and the values in the original labels.\n');
         fprintf('\n');
