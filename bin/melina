@@ -19,6 +19,8 @@ Usage: melina -s <subjid> [options]
                 Default is 0.5. If supplied, the output file will
                 contain the value in the filename.
                 More than one -f can be supploed.
+-d <distance> : Same as -f, but uses absolute distance (in mm)
+                from the white surface.
 
 _____________________________________
 Anderson M. Winkler
@@ -32,16 +34,18 @@ fi
 # Check and accept the input arguments
 subj=""
 PF_LIST=""
+PD_LIST=""
 t2flair=""
-while getopts 's:t:f:' OPTION
+while getopts 's:t:f:d:' OPTION
 do
   case ${OPTION} in
     s) subj=${OPTARG} ;;
     t) t2flair=${OPTARG} ;;
     f) PF_LIST="${PF_LIST} ${OPTARG}" ;;
+    d) PD_LIST="${PD_LIST} ${OPTARG}" ;;
   esac
 done
-[[ ${PF_LIST} == "" ]] && PF_LIST=0.5 
+[[ ${PF_LIST} == "" ]] && PF_LIST=0.5  
 if [[ ${t2flair} == "" ]] ; then
    if   [[ -f ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz ]] ; then
       t2flair=T2
@@ -68,6 +72,16 @@ for pf in ${PF_LIST} ; do
    for h in lh rh ; do
       mri_vol2surf --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
          --regheader ${subj} --projfrac ${pf} --interp nearest \
-         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pfstr}.mgz
+         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.f${pfstr}.mgz
+   done
+done
+for pd in ${PD_LIST} ; do
+   [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pfstr="_${pd}" || pdstr=""
+   for h in lh rh ; do
+      mris_expand ${SUBJECTS_DIR}/${subj}/surf/${h}.white ${pd} \
+                  ${SUBJECTS_DIR}/${subj}/surf/${h}.mid.d${pd}mm
+      mri_vol2surf --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+         --regheader ${subj} --surf mid.d${pd}mm -interp nearest
+         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.d${pdstr}mm.mgz
    done
 done
