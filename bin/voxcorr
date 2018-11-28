@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 30 15:44:58 2018
+
+@author: winkleram
+"""
+
+import sys
+import argparse
+import numpy as np
+import nibabel as nib
+np.seterr(divide='ignore', invalid='ignore')
+
+def printHelp(argv, description): # ===========================================
+
+    # Print help. This is meant to be called from parseArguments
+    print(description)
+    print("")
+    print("Usage:")
+    print("{} -i <image1> -i <image2> -o <outprefix> [-m <mask>] [-s]".format(argv[0]))
+    print("")
+    print("-i : Input file (use twice, for two inputs)")
+    print("-o : Output prefix, which will be used to name the output files.")
+    print("-m : Mask (a 3D NIFTI file).")
+    print("-s : Spatial correlation instead of temporal")
+    print("")
+    print("This tool will compute the voxelwise correlation between two 4D NIFTI files,")
+    print("and will also provide voxelwise maps of 3 parameters computed from the")
+    print("Bland-Altman plots that relate these two files: the mean difference,")
+    print("the slope of the dots of the BA-plot, and their coefficient of variation,")
+    print("which is computed as the standard deviation of the residuals of a model")
+    print("that has intercept and slope, divided by the mean.")
+    print("")
+    print("If one of the two inputs is a 3D file, then it will compute instead spatial")
+    print("correlations of each volume from the 4D file versus the single 3D one. It")
+    print("will compute the BA parameters also spatially. Outputs are then text files.")
+    print("")
+    print("If the option -s is given, then it will operate on space even if both")
+    print("input files are 4D.")
+    print("")
+    print("_____________________________________")
+    print("Anderson M. Winkler")
+    print("National Institutes of Health (NIH)")
+    print("Oct/2018")
+    print("http://brainder.org")
+    exit(1)
+
+def parseArguments(argv): # ===================================================
+
+    # Parse arguments
+    description = "Compute temporal or spatial correlations."
+    if len (argv) <= 1:
+        printHelp(argv, description)
+    else:
+        epilog = "Run without arguments for complete usage information."
+        parser = argparse.ArgumentParser(description=description, epilog=epilog)
+        parser.add_argument('-i', '--in',      help="input file.",
+                            type=argparse.FileType('r'), dest='infile', action='append', required=True)
+        parser.add_argument('-o', '--out',     help="output prefix (no extension).",
+                            type=str, dest='outfile', action='store', required=True)
+        parser.add_argument('-m', '--mask',    help="mask file.",
+                            type=argparse.FileType('r'), dest='mask', action='store', required=False)
+        parser.add_argument('-s', '--spatial', help="spatial correlation instead of temporal.",
+                            dest='spatial', action='store_true', required=False)
+        args = parser.parse_args(argv[1:])
+        return args
+
+def loadNifti(filename, NonSteadyState=0): # ==================================
+    n = nib.load(filename)
+    naff   = n.affine
+    img4d  = n.get_fdata();
+    imgsiz = img4d.shape
+    if len(imgsiz) == 4:
+        img4d  = img4d[:,:,:,NonSteadyState:]
+        imgsiz = img4d.shape
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), imgsiz[-1]), order='F').T
+    else:
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), 1), order='F').T
+    return img2d, imgsiz, naff
+
+def saveNifti(filename, img, size, affine): # =================================
+    n = nib.Nifti1Image(np.reshape(np.transpose(img), size, order='F'), affine)
+    nib.save(n, filename)
+
+class structtype():
+    pass
+
+# ======== [ Main ] ===========================================================
+if __name__ == '__main__':
+    args = parseArguments(sys.argv)
+    
+    # Load images, reshape to 2D, mask
+    imgA, sizA, affA = loadNifti(args.infile[0].name)
+    imgB, sizB, affB = loadNifti(args.infile[1].name)
+    if sizA[0:2] != sizB[0:2]:
+        sys.exit("Inputs 1 and 2 have incompatible sizes.")
+    if hasattr(args.mask, 'name') and args.mask.name:
+        imgM, sizM, affM = loadNifti(args.mask.name)
+        if sizA[0:2] != sizM[0:2]:
+            sys.exit("Mask has size incompatible with inputs.")
+    else:
+        sizM = sizA[0:3]
+        affM = affA
+        imgM = np.ones((1,imgA.shape[1]))
+    mask = np.squeeze(imgM.T.astype(bool))
+    imgA = imgA[:,mask]
+    imgB = imgB[:,mask]
+    
+    # Decide whether spatial or temporal
+    if imgA.shape[0] == 1 or imgB.shape[0] == 1 or args.spatial:
+        axis=1
+    else:
+        axis=0
+    
+    # Compute the correlations and save
+    imgA0  = np.subtract(imgA, np.mean(imgA, axis=axis, keepdims=True))
+    imgB0  = np.subtract(imgB, np.mean(imgB, axis=axis, keepdims=True))
+    numer  = np.mean(np.multiply(imgA0, imgB0), axis=axis)
+    denom  = np.multiply(np.std(imgA0, axis=axis), np.std(imgB0, axis=axis))
+    r      = np.zeros(numer.shape)
+    idx    = denom != 0 # avoid division by 0
+    r[idx] = np.divide(numer[idx], denom[idx])
+    if axis == 0:
+        imgR = np.zeros(imgM.shape)
+        imgR[0, mask] = r[:]
+        saveNifti('{}_corr.nii.gz'.format(args.outfile), imgR, sizM, affM)
+    else:
+        if args.outfile == '-':
+            print(r)
+        else:
+            np.savetxt('{}_corr.csv'.format(args.outfile), r)
+
+    # Compute the variables for Bland-Altman plots, and save
+    X  = (imgA + imgB)/2.
+    X0 = np.subtract(X, np.mean(X, axis=axis, keepdims=True))
+    Y  = imgA - imgB
+    nT, nV  = Y.shape
+    if axis == 0:
+        O = np.ones((nT, 1))
+        m = np.zeros((1, nV))
+        s = np.zeros((1, nV))
+        d = np.zeros((1, nV))
+        for v in range(nV):
+            Xv = X0[:, None, v]
+            X = np.concatenate((O, Xv), axis=1)
+            if np.any(np.isinf(Xv)) or np.any(np.isnan(Xv)):
+                b = np.zeros((2, 1)) + np.nan
+            else:
+                b = np.linalg.lstsq(X, Y[:, None, v], rcond=None)[0]
+            m[0, v] = b[0]
+            s[0, v] = b[1]
+            d[0, v] = np.std(Y[:, None, v] - np.dot(X, b), axis=0)
+        d = np.divide(d, m)
+        img = np.zeros(imgM.shape)
+        img[0, mask] = m[:]
+        saveNifti('{}_ba-mean.nii.gz'.format(args.outfile), img, sizM, affM)
+        img[0, mask] = s[:]
+        saveNifti('{}_ba-slope.nii.gz'.format(args.outfile), img, sizM, affM)
+        img[0, mask] = d[:]
+        saveNifti('{}_ba-dispersion.nii.gz'.format(args.outfile), img, sizM, affM)
+    else:
+        O = np.ones((nV, 1))
+        m = np.zeros((nT, 1))
+        s = np.zeros((nT, 1))
+        d = np.zeros((nT, 1))
+        for t in range(nT):
+            Xt = X0[None, t, :].T
+            X = np.concatenate((O, Xt), axis=1)
+            if np.any(np.isinf(Xt)) or np.any(np.isnan(Xt)):
+                b = np.zeros((2, 1)) + np.nan
+            else:
+                b = np.linalg.lstsq(X, Y[None, t, :].T, rcond=None)[0]
+            m[t] = b[0]
+            s[t] = b[1]
+            d[t] = np.std(Y[None, t, :].T - np.dot(X, b), axis=0)
+        d = np.divide(d, m)
+        if args.outfile == '-':
+            print(np.concatenate((m, s, d), axis=1))
+        else:
+            np.savetxt('{}_ba.csv'.format(args.outfile), np.concatenate((m, s, d), axis=1))

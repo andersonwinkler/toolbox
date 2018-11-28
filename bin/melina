@@ -63,25 +63,29 @@ fi
 # Compute the ratio T1/T2 or T1/FLAIR
 ${FREESURFER_HOME}/bin/fscalc \
      ${SUBJECTS_DIR}/${subj}/mri/orig.mgz div \
-     ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz --o \
-     ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
+     ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz \
+     --o ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
 
-# Project to the surface
+# Project to the surface, using fraction of distance between white (0) and pial (1)
 for pf in ${PF_LIST} ; do
    [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr="_${pf}" || pfstr=""
    for h in lh rh ; do
-      mri_vol2surf --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+      ${FREESURFER_HOME}/bin/mri_vol2surf \
+         --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
          --regheader ${subj} --projfrac ${pf} --interp nearest \
          --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.f${pfstr}.mgz
    done
 done
+# Project to the surface, using a distance from the white.
 for pd in ${PD_LIST} ; do
    [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pfstr="_${pd}" || pdstr=""
    for h in lh rh ; do
-      mris_expand ${SUBJECTS_DIR}/${subj}/surf/${h}.white ${pd} \
+      ${FREESURFER_HOME}/bin/mris_expand \
+                  ${SUBJECTS_DIR}/${subj}/surf/${h}.white ${pd} \
                   ${SUBJECTS_DIR}/${subj}/surf/${h}.mid.d${pd}mm
-      mri_vol2surf --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --surf mid.d${pd}mm -interp nearest
+      ${FREESURFER_HOME}/bin/mri_vol2surf \
+         --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+         --regheader ${subj} --surf mid.d${pd}mm --interp nearest \
          --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.d${pdstr}mm.mgz
    done
 done

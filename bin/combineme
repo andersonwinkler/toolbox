@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 30 15:44:58 2018
+
+@author: winkleram
+"""
+import numpy as np
+import nibabel as nib
+import json
+import sys
+import argparse
+import os
+from scipy.special import xlogy
+np.seterr(divide='ignore', invalid='ignore')
+
+def printHelp(argv, description): # ===========================================
+
+    # Print help. This is meant to be called from parseArguments
+    print(description)
+    print("")
+    print("Usage:")
+    print("{} -i <echo1> -i <echo2> [...] -o <outprefix> [-m <mask>] [-c <method>]".format(argv[0]))
+    print("")
+    print("-i : Input file (use twice, for two inputs)")
+    print("-o : Output prefix, which will be used to name the output files.")
+    print("-m : Mask (a 3D NIFTI file).")
+    print("-c : Method for the combination. Can be one of:")
+    print("     'Posse1999', 'Posse2003', 'Poser2006'.")
+    print("     Default is 'Posse2003'.")
+    print("-n : Number of non-steady state scans to be removed.")
+    print("")
+    print("_____________________________________")
+    print("Anderson M. Winkler")
+    print("National Institutes of Health")
+    print("Oct/2018")
+    print("http://brainder.org")
+    exit(1)
+
+def parseArguments(argv): # ===================================================
+
+    # Parse arguments
+    description = "Combine the echoes of a multi-echo fMRI run in some optimal way."
+    if len (argv) <= 1:
+        printHelp(argv, description)
+    else:
+        epilog = "Run without arguments for complete usage information."
+        parser = argparse.ArgumentParser(description=description, epilog=epilog)
+        parser.add_argument('-i', '--in',      help="input file.",
+                            type=argparse.FileType('r'), dest='infile', action='append', required=True)
+        parser.add_argument('-o', '--out',     help="output prefix (no extension).",
+                            type=str, dest='outfile', action='store', required=True)
+        parser.add_argument('-m', '--mask',    help="mask file.", default='',
+                            type=str, dest='mask',   action='store', required=False)
+        parser.add_argument('-c', '--method', help="method to use for combination.",
+                            type=str, dest='method', action='store', required=False)
+        parser.add_argument('-n', '--nss', help="non-steady state scans to remove.",
+                            type=int, dest='nss', action='store', required=False)
+        args = parser.parse_args(argv[1:])
+        return args
+
+def removeExtension(filename): # ==============================================
+    dirn = os.path.dirname(filename)
+    base = os.path.basename(filename)
+    splt = os.path.splitext(base)
+    if splt[-1] == '.gz':
+        splt = os.path.splitext(splt[0])
+    return os.path.join(dirn, splt[0])
+
+def loadNifti(filename, NonSteadyState=0): # ==================================
+    n = nib.load(filename)
+    naff   = n.affine
+    img4d  = n.get_fdata();
+    imgsiz = img4d.shape
+    if len(imgsiz) == 4:
+        img4d  = img4d[:,:,:,NonSteadyState:]
+        imgsiz = img4d.shape
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), imgsiz[-1]), order='F').T
+    else:
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), 1), order='F').T
+    return img2d, imgsiz, naff
+
+def loadMask(filename):
+    if filename != '':
+        m    = nib.load(filename)
+        mask = m.get_fdata();
+        mask = np.reshape(mask, (np.prod(mask.shape[0:3])), order='F').astype(bool)
+    else:
+        mask = []
+    return mask
+
+def loadEchoes(filenames, mask, NonSteadyState=0, axis=None, bet=None): # =====
+    img    = []
+    echoes = []
+    for idx, f in enumerate(filenames):
+        fnam   = removeExtension(f)
+        n      = nib.load(f)
+        naff   = n.affine
+        img4d  = n.get_fdata();
+        img4d  = img4d[:,:,:,NonSteadyState:]
+        imgsiz = img4d.shape
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), imgsiz[-1]), order='F').T
+        if mask != []:
+            img2d  = img2d[:, mask]
+        img.append(img2d)
+        with open('{}.json'.format(fnam)) as h:
+            json_data = json.load(h)
+        echoes.append(json_data['EchoTime']*1000) # to miliseconds
+        if axis != None:
+            img = np.concatenate(img, axis=axis)
+    return img, imgsiz, naff, tuple(echoes)
+
+def saveNifti(filename, X, size, affine, mask): # =============================
+    size = (*size[0:3], X.shape[0])
+    if len(mask) == 0:
+        mask = np.ones(X.shape[-1], dtype=bool)
+    img = np.zeros((X.shape[0], len(mask)))
+    img[:, mask] = X
+    n = nib.Nifti1Image(np.reshape(np.transpose(img), size, order='F'), affine)
+    nib.save(n, filename)
+
+def prepFit(img, method='Concatenation'): # ===================================
+    if method == 'Concatenation':
+        # Concatenate the echoes along time.
+        Y = np.concatenate(img, axis=0)
+    elif method == 'GlobalRatio':
+        # Concatenate the echoes after dividing each by their mean. After the 
+        # log is taken, the fit will be for S0t/S0avg * exp(-TE*(R2avg - R2t))
+        # As R2avg gets merged with S0t/S0avg through the intercept, the slope
+        # codes for -R2t (i.e., time varying, not a change in relation to R2avg),
+        # such that this model is equivalent to the above concatenation.
+        # If log is not taken, this is the method prescribed by Kundu 2012.
+        img0 = np.concatenate(img, axis=0)
+        m = np.mean(img0, axis=0, keepdims=True);
+        Y = np.divide(img0, m)
+    Y = np.maximum(Y, 0)
+    return Y
+
+def fitModel(Y, echoes, slope='Random', intercept='Fixed', logscale=True): # ==
+    lenY = int(Y.shape[0]/len(echoes))
+    if logscale:
+        Y = xlogy(np.sign(Y),Y)  # Compute x*log(y) so that the result is 0 if x = 0.
+        
+    # Prepare the slope for the model (TE)
+    if slope == 'Fixed': 
+        O = np.ones((lenY, 1))
+        Xs = np.concatenate([O*x for x in echoes], axis=0)
+    elif slope == 'Random':
+        I = np.identity(lenY)
+        Xs = np.concatenate([I*x for x in echoes], axis=0)
+    elif slope == 'None' or slope == None:
+        Xs = np.array([]).reshape(int(Y.shape[0]), 0)
+        
+    # Prepare the intercept for the model (S0)
+    if intercept == 'Fixed':
+        Xi = np.ones((lenY*len(echoes), 1))
+    elif intercept == 'Random':
+        I = np.identity(lenY)
+        Xi = np.concatenate([I for x in echoes], axis=0)
+    elif intercept == 'None' or intercept == None:
+        Xi = np.array([]).reshape(int(Y.shape[0]), 0)
+        
+    # Assemble the model, and fit.
+    X = np.concatenate([Xs, Xi], axis=1)
+    b, res, rank, s = np.linalg.lstsq(X, Y, rcond=None)
+    
+    # Prepare the outputs
+    if slope == 'None' or slope == None:
+        T2s = np.array([])
+        S0  = b
+    elif slope == 'None' or slope == None:
+        T2s = b
+        S0  = np.array([])
+    else:
+        T2s = -1/b[0:Xs.shape[1],:]
+        S0  = b[Xs.shape[1]:,:] 
+    if logscale:
+        S0 = np.exp(S0)
+    return T2s, S0
+
+
+def weightedCombination(img, echoes, T2s, method='Posse2003',
+                        variant='Fixed'): # ===================================
+    S = np.zeros(img[0].shape)
+    if method == 'Posse1999':
+        for idx, te in enumerate(echoes):
+            w  = te/T2s*np.exp(-te/T2s)
+            S += np.multiply(img[idx], w)
+    elif method == 'Posse2003':
+        den = np.zeros(img[0].shape)
+        for idx, te in enumerate(echoes):
+            w    = te*np.exp(-te/T2s)
+            S   += np.multiply(img[idx], w)
+            den += w
+        S = np.divide(S, den)
+    elif method == 'Poser2006':
+        den = np.zeros((1, img[0].shape[1]))
+        for idx, te in enumerate(echoes):
+            sig  = np.mean(img[idx], axis=0)
+            std  = np.std (img[idx], axis=0)
+            snr  = np.divide(sig, std)
+            w    = snr*te
+            S   += np.multiply(img[idx], w)
+            den += w
+        S = np.divide(S, den)
+    elif method == 'Winkler2018':
+        den = np.zeros(img[0].shape)
+        for idx, te in enumerate(echoes):
+            if variant == 'Random':
+                w = np.multiply(img[idx], te)
+            elif variant == 'Fixed':
+                w = np.multiply(np.mean(img[idx], axis=0), te)
+            S    += np.multiply(img[idx], w)
+            den += w
+        S = np.divide(S, den)
+    else:
+        print("Method {} does not exist.", method)
+    return S
+
+def meanCenter(X, axis=0): # ==================================================
+    me = np.mean(X, axis=axis, keepdims=True)
+    X  = np.subtract(X, me)
+    return X
+
+
+# ======== [ Main ] ===========================================================
+if __name__ == '__main__':
+    args = parseArguments(sys.argv)
+    
+    # Load the echo image files
+    mask = loadMask(args.mask)
+    img, Ysize, Yaffine, echoes = loadEchoes((i.name for i in args.infile), 
+                                             mask,
+                                             NonSteadyState=args.nss,
+                                             axis=None,
+                                             bet=0)
+
+    if args.method == '':
+        method = 'Posse2003'
+    else:
+        method = args.method
+    
+    if method == 'Posse1999' or method == 'Posse2003':
+        Y = prepFit(img, method='Concatenation')
+        T2s, S0 = fitModel(Y, echoes, slope='Fixed', intercept='Fixed', logscale=True)
+    else:
+        T2s = []
+    
+    # Do the weighted combination
+    S = weightedCombination(img, echoes, T2s, method=method)
+    saveNifti(args.outfile, S, Ysize, Yaffine, mask)
