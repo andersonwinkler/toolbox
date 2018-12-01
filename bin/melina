@@ -45,7 +45,8 @@ do
     d) PD_LIST="${PD_LIST} ${OPTARG}" ;;
   esac
 done
-[[ ${PF_LIST} == "" ]] && PF_LIST=0.5  
+[[ ${PF_LIST} == "" ]] && PF_LIST=0.5
+[[ ${PD_LIST} == "" ]] && PF_LIST=1.0
 if [[ ${t2flair} == "" ]] ; then
    if   [[ -f ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz ]] ; then
       t2flair=T2
@@ -68,24 +69,51 @@ ${FREESURFER_HOME}/bin/fscalc \
 
 # Project to the surface, using fraction of distance between white (0) and pial (1)
 for pf in ${PF_LIST} ; do
-   [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr="_${pf}" || pfstr=""
+   [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr=".f${pf}" || pfstr=""
    for h in lh rh ; do
       ${FREESURFER_HOME}/bin/mri_vol2surf \
          --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
          --regheader ${subj} --projfrac ${pf} --interp nearest \
-         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.f${pfstr}.mgz
+         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pfstr}.mgz
    done
 done
+
 # Project to the surface, using a distance from the white.
 for pd in ${PD_LIST} ; do
-   [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pfstr="_${pd}" || pdstr=""
+   [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pdstr=".d${pd}mm" || pdstr=""
    for h in lh rh ; do
-      ${FREESURFER_HOME}/bin/mris_expand \
-                  ${SUBJECTS_DIR}/${subj}/surf/${h}.white ${pd} \
-                  ${SUBJECTS_DIR}/${subj}/surf/${h}.mid.d${pd}mm
+      # # Bruce's strategy uses mris_expand followed by mri_vol2surf
+      # ${FREESURFER_HOME}/bin/mris_expand \
+                  # ${SUBJECTS_DIR}/${subj}/surf/${h}.white ${pd} \
+                  # ${SUBJECTS_DIR}/${subj}/surf/${h}.mid${pdstr}
+      # ${FREESURFER_HOME}/bin/mri_vol2surf \
+         # --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+         # --regheader ${subj} --surf mid${pdstr} --interp nearest \
+         # --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pdstr}.mgz
+      # One can also use --projdist directly
       ${FREESURFER_HOME}/bin/mri_vol2surf \
          --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --surf mid.d${pd}mm --interp nearest \
-         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.d${pdstr}mm.mgz
+         --regheader ${subj} --projdist ${pd} --interp nearest \
+         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pdstr}.mgz
    done
 done
+
+# Compute the partial volume effects of the cortical mantle.
+for h in lh rh ; do
+   for surf in white pial ; do
+      # The parameter that goes with "-acc" below is the 
+      # "max error tolerable per voxel", according to 
+      # freesurfer/utils/mris_compVolFrac.c
+      ${FREESURFER_HOME}/bin/mris_compute_volume_fractions \
+            --vol  ${SUBJECTS_DIR}/${subj}/mri/nu.mgz \
+            --surf ${SUBJECTS_DIR}/${subj}/surf/${h}.${surf} \
+            --usf 4 --acc .001 \
+            --out  ${SUBJECTS_DIR}/${subj}/mri/${h}.${surf}.frac.mgz
+   done
+   ${FREESURFER_HOME}/bin/fscalc \
+                   ${SUBJECTS_DIR}/${subj}/mri/${h}.pial.frac.mgz sub \
+                   ${SUBJECTS_DIR}/${subj}/mri/${h}.white.frac.mgz\
+             --out ${SUBJECTS_DIR}/${subj}/mri/${h}.mantle.frac.mgz
+done
+
+
