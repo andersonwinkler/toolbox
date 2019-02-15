@@ -6,7 +6,7 @@
 % Usage:
 % mgh2dpv(filevtk,filesrf)
 %
-% filemgh : Input VTK file.
+% filemgh : Input MGZ file.
 % filesrf : Output SRF file.
 %
 % _____________________________________
