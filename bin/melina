@@ -7,8 +7,7 @@ subject has been processed using either T2 or FLAIR images.
 
 Usage: melina -s <subjid> [options]
 
--s <subjid>   : Subject (already processed with recon-all). More than
-                one can be supplied with multiple -s.
+-s <subjid>   : Subject (already processed with recon-all).
 -t <seq>      : Optional. Indicate whether T2 or FLAIR should be used.
                 If not supplied, it will try T2 first, and if not
                 available, it will try FLAIR.
@@ -72,10 +71,11 @@ for pf in ${PF_LIST} ; do
    for h in lh rh ; do
       ${FREESURFER_HOME}/bin/mri_vol2surf \
          --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --projfrac ${pf} --interp nearest \
+         --regheader ${subj} --projfrac ${pf} --interp trilinear \
          --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.f${pfstr}.mgz
    done
 done
+
 # Project to the surface, using a distance from the white.
 for pd in ${PD_LIST} ; do
    [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pfstr="_${pd}" || pdstr=""
@@ -85,7 +85,7 @@ for pd in ${PD_LIST} ; do
                   ${SUBJECTS_DIR}/${subj}/surf/${h}.mid.d${pd}mm
       ${FREESURFER_HOME}/bin/mri_vol2surf \
          --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --surf mid.d${pd}mm --interp nearest \
+         --regheader ${subj} --surf mid.d${pd}mm --interp trilinear \
          --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.d${pdstr}mm.mgz
    done
 done
