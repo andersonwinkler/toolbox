@@ -1,10 +1,6 @@
 function [cc,A,B,U,V] = cca(X,Y,df)
 % Do CCA via QR & SVD.
-<<<<<<< HEAD
 %
-=======
-% 
->>>>>>> dbcb8a2118a82c82d8013627b27ef1c2fa99fede
 % Usage:
 % [cc,A,B,U,V] = cca(X,Y,df)
 %
@@ -22,35 +18,19 @@ function [cc,A,B,U,V] = cca(X,Y,df)
 %           be no larger than N-1. For speed, it is not
 %           tested internally, though, so enter this
 %           wisely.
-<<<<<<< HEAD
-%
-=======
-% 
->>>>>>> dbcb8a2118a82c82d8013627b27ef1c2fa99fede
 % Outputs:
 % cc       : Canonical correlations.
 % A and B  : Canonical coefficients.
 % U and V  : Canonical variables.
-<<<<<<< HEAD
-%
-% U=X*A and V=Y*B. such that each pair of columns in U and V
-% are maximally correlated, under the orthonality constraint.
-%
-=======
 % 
 % U=X*A and V=Y*B. such that each pair of columns in U and V
 % are maximally correlated, under the orthonality constraint.
 % 
->>>>>>> dbcb8a2118a82c82d8013627b27ef1c2fa99fede
 % Based on the algorithm proposed by:
 % * Bjorck A, Golub GH. Numerical methods for
 %   computing angles between linear subspaces.
 %   Math Comput. 1973;27(123):579-579.
-<<<<<<< HEAD
 %
-=======
-% 
->>>>>>> dbcb8a2118a82c82d8013627b27ef1c2fa99fede
 % _____________________________________
 % Anderson M. Winkler
 % National Institutes of Health
@@ -67,8 +47,4 @@ cc = min(max(diag(D(:,1:k))',0),1);
 A(iX,:) = A;
 B(iY,:) = B;
 U  = X*A;
-<<<<<<< HEAD
 V  = Y*B;
-=======
-V  = Y*B;
->>>>>>> dbcb8a2118a82c82d8013627b27ef1c2fa99fede
