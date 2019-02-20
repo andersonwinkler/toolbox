@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function clusterstats(varargin)
 % Extract the sum or mean for the vertices or faces
 % of a DPX file, masked by a DPX file that defines
@@ -21,8 +21,9 @@
 %
 % _____________________________________
 % Anderson M. Winkler
-% FMRIB / University of Oxford
+% FMRIB / Univ. of Oxford
 % Feb/2012
+% http://brainder.org
 
 % Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
 try
@@ -55,8 +56,9 @@ try
         fprintf('\n');
         fprintf('_____________________________________\n');
         fprintf('Anderson M. Winkler\n');
-        fprintf('FMRIB / University of Oxford\n');
+        fprintf('FMRIB / Univ. of Oxford\n');
         fprintf('Feb/2012\n');
+        fprintf('http://brainder.org\n');
         fprintf('\n');
         return;
     end
@@ -102,7 +104,7 @@ nC  = max(clu);
 s = zeros(nC+1,1);   m = s;
 for c = 0:nC;
     if c == 0,
-        mask = clu > c;
+        mask = clu >= c;
     else
         mask = clu == c;
     end

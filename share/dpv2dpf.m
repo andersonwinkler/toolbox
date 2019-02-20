@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpv2dpf(varargin)
 % Convert data-per-vertex(DPV) to data-per-face (DPF) files, redistributing the
 % face quantities to their vertices. Assumes that the quantity is

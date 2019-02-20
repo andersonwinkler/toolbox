@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function smoothdpx(varargin)
 % Smooth data per face (DPF) or data per vertex (DPV) with a Gaussian kernel
 % of a specified width. The user must supply a spherical reference surface.

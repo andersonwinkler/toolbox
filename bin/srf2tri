@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function srf2tri(srffile,trifile,radius)
 % Convert an ASCII surface file (.srf) to a triangle file (.tri).
 %

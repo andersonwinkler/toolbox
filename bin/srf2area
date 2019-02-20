@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function srf2area(varargin)
 % Compute the area per face or per vertex for an ASCII surface file and
 % save as a DPV or DPF (aka curvature) file.

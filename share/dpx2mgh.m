@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function dpx2mgh(varargin)
 % Concatenates several DPX (DPF or DPV) files into a
 % single MGH file, with each DPX file represented as

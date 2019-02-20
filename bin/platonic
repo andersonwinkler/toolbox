@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function platonic(varargin)
 % Create one of the five Platonic polyhedra (tetrahedron, hexahedron,
 % octahedron, dodecahedron and icosahedron) OR a geodesic sphere by
@@ -33,7 +33,6 @@
 % Anderson M. Winkler
 % Yale University / Institute of Living
 % Jan/2011
-% http://brainder.org
 
 % Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
 try
@@ -78,7 +77,6 @@ try
         fprintf('Anderson M. Winkler\n');
         fprintf('Yale University / Institute of Living\n');
         fprintf('Jan/2011\n');
-        fprintf('http://brainder.org\n');
         return;
     end
 end

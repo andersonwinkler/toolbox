@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function srf2ply(varargin)
 % Convert Surface ASCII format to PLY.
 % 

@@ -1,20 +1,18 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function dpxstats(varargin)
 % Display some statistics for a DPF or DPV file.
-% If more than one file is specified, and if all contain
-% the same number of datapoints, it prints also
-% the correlation matrix.
-% 
+%
 % Usage:
-% dpxstats('file1.dpf','file2.dpf','file3.dpf',...)
-% 
-% If the option -t is given as the last argument, the
-% first part of the output is printed as a table (CSV).
+% dpxstats('file1.dpf','file2.dpf','file3.dpf',...,'-t','-c')
+%
+% -t : Print as a table (CSV).
+% -c : Print also a correlation matrix.
 %
 % _____________________________________
 % Anderson M. Winkler
 % Yale University / Institute of Living
-% Jul/2011
+% Jul/2011 (first version)
+% Oct/2018 (this version)
 % http://brainder.org
 
 % Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
@@ -22,50 +20,54 @@ try %#ok
     % Get the inputs
     varargin = argv();
     nargin = numel(varargin); %#ok
-
+    
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
-
+    
     % Print usage if no inputs are given
-    if isempty(varargin) || strcmp(varargin{1},'-q'),
+    if isempty(varargin) || strcmp(varargin{1},'-q')
         fprintf('Display some statistics for a DPF or DPV file.\n');
-        fprintf('If more than one file is specified, and if all contain\n');
-        fprintf('the same number of datapoints, it prints also\n');
-        fprintf('the correlation matrix.\n');
         fprintf('\n');
         fprintf('Usage:\n');
-        fprintf('dpxstats <file1.dpf> [file2.dpf] [file3.dpf] ...\n');
+        fprintf('dpxstats file1.dpf file2.dpf file3.dpf [... ] -t -c\n');
         fprintf('\n');
-        fprintf('If the option -t is given as the last argument, the\n');
-        fprintf('first part of the output is printed as a table (CSV).\n');
+        fprintf('-t : (Optional) Print as a table (CSV).\n');
+        fprintf('-c : (Optional) Print also a correlation matrix.\n');
         fprintf('\n');
         fprintf('_____________________________________\n');
         fprintf('Anderson M. Winkler\n');
         fprintf('Yale University / Institute of Living\n');
-        fprintf('Jul/2011\n');
+        fprintf('Jul/2011 (first version)\n');
+        fprintf('Oct/2018 (this version)\n');
         fprintf('http://brainder.org\n');
         return;
     end
 end
 
 % Make sure this works on any Matlab version
-nargin = numel(varargin);
-if strcmp(varargin{nargin},'-t'),
+tidx = strcmp(varargin,'-t');
+if any(tidx)
     showastable = true;
-    varargin = varargin(1:nargin-1);
-    nfiles = nargin - 1;
+    varargin(tidx) = [];
 else
     showastable = false;
-    nfiles = nargin;
 end
+cidx = strcmp(varargin,'-c');
+if any(cidx)
+    showcorr = true;
+    varargin(cidx) = [];
+else
+    showcorr = false;
+end
+nfiles = numel(varargin);
 
 % Loop over images
 dpx   = cell(nfiles,1);
 nD    = zeros(nfiles,1);
 nvoid = zeros(nfiles,1);
-if showastable,
+if showastable
     fprintf('Filename,Npoints,Ninf&Nnan,%%Ninf&Nnan,mean,std,min,max,median,mode,sum\n')
-    for a = 1:nfiles,
+    for a = 1:nfiles
         
         % Read the file
         dpx{a} = dpxread(varargin{a});
@@ -90,7 +92,7 @@ if showastable,
             sum(dpx{a}(didx)));
     end
 else
-    for a = 1:nfiles,
+    for a = 1:nfiles
         
         % Read the file
         dpx{a} = dpxread(varargin{a});
@@ -115,20 +117,22 @@ else
 end
 
 % If the number of datapoints is the same for all
-if nfiles > 1,
-    if numel(unique(nD)) == 1 && numel(unique(nvoid)) == 1;
+if nfiles > 1
+    if numel(unique(nD)) == 1 && numel(unique(nvoid)) == 1
         
         % Initialize & assemble a matrix
         dpxall = zeros(nD(1)-nvoid(1),nfiles);
-        for a = 1:nfiles,
+        for a = 1:nfiles
             didx = ~isnan(dpx{a}) & ~isinf(dpx{a});
             dpxall(:,a) = dpx{a}(didx);
         end
         
         % Compute & display the correlation matrix
-        C = corrcoef(dpxall);
-        disp('Correlation matrix:')
-        disp(C);
+        if showcorr
+            C = corrcoef(dpxall);
+            disp('Correlation matrix:')
+            disp(C);
+        end
     else
         
         % If unavailable...

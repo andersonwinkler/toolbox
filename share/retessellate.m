@@ -1,4 +1,3 @@
-% #!/usr/bin/octave -q
 function retessellate(varargin)
 % Retessellate a surface.
 %

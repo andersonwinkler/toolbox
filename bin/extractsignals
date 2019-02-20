@@ -11,17 +11,25 @@ For the FEAT data, all the registration steps must have
 been run. For the FreeSurfer data, recon-all must have
 run until completion. 
 
-Usage: extractsignals -f <FEATdir> -o <out_prefix> [-s <FSdir>] [-r] [-d]
+Usage: extractsignals -f <FEATdir> -o <out_prefix> 
+          [-a <AROMADIR> [-g]] [-s <FSdir>] [-r] [-d]
 
--f : FEAT directory for this subject (*.feat).
+-f : FEAT directory for this subject (.feat).
 -o : Output prefix.
 -s : Directory with FreeSurfer results for this subject. If
      omitted, FAST will be applied to the highres present in
      the FEAT directory, and CSF and WM partitions will be used.
      If supplied, signals will be extracted from the CSF, WM,
      callosum, cerebellum WM, and brain stem.
--r : Use raw functional w/ MCFLIRT? If omitted, will use the
-     filtered_func_data from the FEAT drectory.
+-r : Use raw functional w/ MCFLIRT? If omitted,
+     will use the filtered_func_data from the FEAT directory.
+     If supplied, will used the raw functional, then will apply
+     MCFLIRT and remove the initial volumes as indicated in
+     the *.fsf file.
+-a : If an AROMA directory is supplied, will regress out motion
+     related components before extracting signals.
+-g : If, in addition to -a, the -g is supplied, it will use the
+     aggressive denoising.
 -d : Debug mode. Don't remove temporary files.
 
 Outputs are saved as text files that start with <out_prefix>.
@@ -42,29 +50,38 @@ fi
 #FS_STRUCT=orig
 FS_STRUCT=brainmask
 
-
 # Accept input arguments
 FSDIR=""
 FEATDIR=""
 OUT="extracted"
 RAW="N"
+AROMADIR=""
+AGGR=""
 DEBUG="N"
-while getopts 's:f:o:rd' OPTION
+while getopts 's:f:o:ra:gd' OPTION
 do
    case ${OPTION} in
-      s) FSDIR="${OPTARG}"   ;;
-      f) FEATDIR="${OPTARG}" ;;
-      o) OUT="${OPTARG}"     ;;
-      r) RAW="Y"             ;;
-      r) DEBUG="Y"           ;;
+      s) FSDIR="${OPTARG}"    ;;
+      f) FEATDIR="${OPTARG}"  ;;
+      o) OUT="${OPTARG}"      ;;
+      r) RAW="Y"              ;;
+      a) AROMADIR="${OPTARG}" ;;
+      g) AGGR="-a"            ;;
+      r) DEBUG="Y"            ;;
    esac
 done
 
 if [[ ! -e ${FEATDIR} ]] ; then
   echo "Error: FEAT directory not found: ${FEATDIR}"
+  exit 1;
 fi
 if [[ "${FSDIR}" != "" ]] && [[ ! -e ${FSDIR} ]] ; then
-  echo "Error: FreeSurfer output directory not found: ${FSDIR}"
+  echo "Error: FreeSurfer directory not found: ${FSDIR}"
+  exit 1;
+fi
+if [[ "${AROMADIR}" != "" ]] && [[ ! -e ${AROMADIR} ]] ; then
+  echo "Error: AROMA directory not found: ${AROMADIR}"
+  exit 1;
 fi
 
 # Prepare a random string to save temporary files
@@ -82,7 +99,7 @@ if [[ ${RAW} == "Y" ]] ; then
   echo "Working on the input functional timeseries"
   feat_file=$(awk '/set feat_files\(1\)/ { gsub(/"/,"",$3) ; print $3 }' ${FEATDIR}/design.fsf)
   if [[ $(${FSLDIR}/bin/imtest ${feat_file}) -eq 0 ]] ; then
-    echo "Error: Original file not found: ${feat_file}"
+    echo "Error: Input file not found: ${feat_file}"
     exit 1
   fi
   feat_npts=$(awk '/set fmri\(npts\)/ { print $3 }' ${FEATDIR}/design.fsf)
@@ -98,6 +115,19 @@ if [[ ${RAW} == "Y" ]] ; then
   FUNCSERIES=${OUT}_${RNDSTR}_mcflirt_func_data
 else
   FUNCSERIES=${FEATDIR}/filtered_func_data
+  if [[ $(${FSLDIR}/bin/imtest ${FUNCSERIES}) -eq 0 ]] ; then
+    echo "Error: Input file not found: ${FUNCSERIES}"
+    exit 1
+  fi
+fi
+
+# Regress out AROMA-selected components:
+if [[ "${AROMADIR}" != "" ]] ; then
+  ${FSLDIR}/bin/fsl_regfilt --in=${FUNCSERIES} \
+                            --design=${AROMADIR}/melodic.ica/melodic_mix \
+                            --filter=$(cat ${AROMADIR}/classified_motion_ICs.txt) \
+                            --out=${OUT}_${RNDSTR}_aroma-filtered_func_data ${AGGR}
+  FUNCSERIES=${OUT}_${RNDSTR}_aroma-filtered_func_data
 fi
 
 # Define the masks. If FreeSurfer is available, use it.

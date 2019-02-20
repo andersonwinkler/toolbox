@@ -1,0 +1,17 @@
+#!/bin/bash
+
+TOOLSBIN=$(dirname ${BASH_SOURCE[0]})
+
+if [[ -z $(which octave) ]] ; then
+   echo "Error: octave executable not found." 
+   exit 1
+fi
+
+for p in $(cat ${TOOLSBIN}/../lib/list_bin+share.csv) ; do
+   echo "Working on ${p}"
+   echo "#!$(which octave) -q" > ${TOOLSBIN}/${p}
+   echo -n "% " >> ${TOOLSBIN}/${p}
+   cat ${TOOLSBIN}/../share/${p}.m >> ${TOOLSBIN}/${p}
+   chmod +x ${TOOLSBIN}/${p}
+done
+

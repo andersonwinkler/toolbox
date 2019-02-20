@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function replacedpx(varargin)
 % Replace values in a DPV/DPF file. The correspondence between
 % old and new values is provided by a CSV table.

@@ -1,0 +1,84 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Prepare multi-echo files for later analyses.
+
+Usage: prepme [input files]
+
+The inputs are 4D image files, one per echo. The first file
+entered is the reference (usually the 1st echo).
+
+This script requires FSL installed and configured.
+
+_____________________________________
+Anderson M. Winkler
+National Institutes of Health
+Oct/2018
+http://brainder.org
+EOU
+exit 1
+fi
+
+# Step 0: Remove file extension from file names:
+ECHO_IN=""
+for e in ${@} ; do
+	ECHO_IN="${ECHO_IN} $(${FSLDIR}/bin/remove_ext ${e})"
+done
+
+echo "Step 1: Slice timing correction"
+for e in ${ECHO_IN} ; do
+	TR=$(${FSLDIR}/bin/fslinfo ${e} | grep ^pixdim4 | awk '{print $2}')
+	${FSLDIR}/bin/slicetimer -i ${e} -o ${e}_step1 -r ${TR} --odd
+done
+
+echo "Step 2: Removal of non-steady state scans"
+nrem=0
+if [[ ${nrem} -ne 0 ]] ; then
+	for e in ${ECHO_IN} ; do
+		dim4=$(${FSLDIR}/bin/fslinfo ${e} | grep ^dim4 | awk '{print $2}')
+		nvols=$(expr ${dim4} - ${nrem})
+		${FSLDIR}/bin/fslroi ${e}_step1 ${e}_step2 ${nrem} ${nvols}
+	done
+else
+	for e in ${ECHO_IN} ; do
+		${FSLDIR}/bin/imln ${e}_step1 ${e}_step2
+	done
+fi
+
+echo "Step 3: Motion correction with MCFLIRT"
+enum=1
+for e in ${ECHO_IN} ; do
+	if [[ ${enum} -eq 1 ]] ; then
+		e1=${e}
+		${FSLDIR}/bin/mcflirt -in ${e1}_step2 -out ${e1}_step3 -mats
+		if [[ -e ${e}_step3.mat/MAT_0000 ]] ; then
+			for m in ${e1}_step3.mat/MAT_* ; do
+				mv ${m} ${m/MAT_/MAT_0}
+			done
+		fi
+		${FSLDIR}/bin/fslroi ${e1}_step2 temp 0 1
+		((enum++))
+	else
+		${FSLDIR}/bin/applyxfm4D ${e}_step2 temp ${e}_step3 ${e1}_step3.mat 1> /dev/null
+	fi
+done
+${FSLDIR}/bin/imrm temp
+
+echo "Step 4: Averaging of timeseries of first echo and BET"
+${FSLDIR}/bin/fslmaths ${e1}_step3 -Tmean ${e1}_step4_avg
+${FSLDIR}/bin/bet ${e1}_step4_avg ${e1}_step4_brain -m -f 0.5
+
+echo "Step 5: Application of mask to all others (and linking of .json files)"
+for e in ${ECHO_IN} ; do
+	${FSLDIR}/bin/fslmaths ${e}_step3 -mas ${e1}_step4_brain_mask ${e}_step5
+	[[ -f ${e}.json ]] && ln -s ${e}.json ${e}_step3.json
+	[[ -f ${e}.json ]] && ln -s ${e}.json ${e}_step5.json
+done
+
+#echo "Step 6: Concatenate across space and run MELODIC"s
+#LIST="" ; for e in ${ECHO_IN} ; do LIST="${LIST} ${e}_step5" ; done
+#${FSLDIR}/bin/fslmerge -x xmerged_s6 ${LIST}
+#LIST="" ; for e in ${ECHO_IN} ; do LIST="${LIST} ${e1}_step4_brain_mask" ; done
+#${FSLDIR}/bin/fslmerge -x xmerged_s6_mask ${LIST}
+#${FSLDIR}/bin/melodic -i xmerged_s6 -o xmerged_s6 --Oall --nobet --mask xmerged_s6_mask 

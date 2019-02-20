@@ -19,6 +19,8 @@ Usage: melina -s <subjid> [options]
                 Default is 0.5. If supplied, the output file will
                 contain the value in the filename.
                 More than one -f can be supploed.
+-d <distance> : Same as -f, but uses absolute distance (in mm)
+                from the white surface.
 
 _____________________________________
 Anderson M. Winkler
@@ -32,16 +34,19 @@ fi
 # Check and accept the input arguments
 subj=""
 PF_LIST=""
+PD_LIST=""
 t2flair=""
-while getopts 's:t:f:' OPTION
+while getopts 's:t:f:d:' OPTION
 do
   case ${OPTION} in
     s) subj=${OPTARG} ;;
     t) t2flair=${OPTARG} ;;
     f) PF_LIST="${PF_LIST} ${OPTARG}" ;;
+    d) PD_LIST="${PD_LIST} ${OPTARG}" ;;
   esac
 done
-[[ ${PF_LIST} == "" ]] && PF_LIST=0.5 
+[[ ${PF_LIST} == "" ]] && PF_LIST=0.5
+[[ ${PD_LIST} == "" ]] && PD_LIST=1.0
 if [[ ${t2flair} == "" ]] ; then
    if   [[ -f ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz ]] ; then
       t2flair=T2
@@ -57,17 +62,89 @@ elif [[ ! -f ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz ]] ; then
 fi
 
 # Compute the ratio T1/T2 or T1/FLAIR
-${FREESURFER_HOME}/bin/fscalc \
+echo "===============[ STEP 1 ]================================"
+echo ${FREESURFER_HOME}/bin/fscalc \
      ${SUBJECTS_DIR}/${subj}/mri/orig.mgz div \
-     ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz --o \
-     ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
+     ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz \
+     --o ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
 
-# Project to the surface
+# Project to the surface, using fraction of distance between white (0) and pial (1)
+echo "===============[ STEP 2A ]================================"
 for pf in ${PF_LIST} ; do
-   [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr="_${pf}" || pfstr=""
+   [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr=".f${pf}" || pfstr=""
    for h in lh rh ; do
-      mri_vol2surf --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --projfrac ${pf} --interp nearest \
+      echo ${FREESURFER_HOME}/bin/mri_vol2surf \
+         --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+         --regheader ${subj} --projfrac ${pf} --interp trilinear \
          --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pfstr}.mgz
    done
 done
+
+# Project to the surface, using a distance from the white.
+echo "===============[ STEP 2B ]================================"
+for pd in ${PD_LIST} ; do
+   [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pdstr=".d${pd}mm" || pdstr=""
+   for h in lh rh ; do
+      echo ${FREESURFER_HOME}/bin/mri_vol2surf \
+         --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+         --regheader ${subj} --projdist ${pd} --interp trilinear \
+         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pdstr}.mgz
+   done
+done
+
+## Compute the partial volume effects of the cortical mantle.
+#echo "===============[ STEP C ]================================"
+#for h in lh rh ; do
+   #for surf in white pial ; do
+      ## The parameter that goes with "-acc" below is the 
+      ## "max error tolerable per voxel", according to 
+      ## freesurfer/utils/mris_compVolFrac.c
+      #echo ${FREESURFER_HOME}/bin/mris_compute_volume_fractions \
+            #--vol  ${SUBJECTS_DIR}/${subj}/mri/nu.mgz \
+            #--surf ${SUBJECTS_DIR}/${subj}/surf/${h}.${surf} \
+            #--acc .001 \
+            #--out  ${SUBJECTS_DIR}/${subj}/mri/${h}.${surf}.volfrac.mgz
+   #done
+   #${FREESURFER_HOME}/bin/fscalc \
+                   #${SUBJECTS_DIR}/${subj}/mri/${h}.pial.volfrac.mgz sub \
+                   #${SUBJECTS_DIR}/${subj}/mri/${h}.white.volfrac.mgz \
+               #--o ${SUBJECTS_DIR}/${subj}/mri/${h}.mantle.volfrac.mgz
+#done
+
+
+# xx
+#echo "===============[ STEP D ]================================"
+#i=0
+#for pf in ${PF_LIST} ; do
+   #istr=$(printf %03d ${i})
+   #for h in lh rh ; do
+      #echo ${FREESURFER_HOME}/bin/mris_expand -thickness \
+                  #${SUBJECTS_DIR}/${subj}/surf/${h}.white ${pf} \
+                  #${SUBJECTS_DIR}/${subj}/surf/${h}.gwdist${istr}
+      #echo ${FREESURFER_HOME}/bin/mris_compute_volume_fractions \
+            #--vol  ${SUBJECTS_DIR}/${subj}/mri/nu.mgz \
+            #--surf ${SUBJECTS_DIR}/${subj}/surf/${h}.gwdist${istr} \
+            #--acc .1 \
+            #--out  ${SUBJECTS_DIR}/${subj}/mri/${h}.gwdist${istr}.volfrac.mgz
+      #echo "Running: ${FREESURFER_HOME}/bin/mris_compute_layer_intensities -${h} \
+                  #${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+                  #${SUBJECTS_DIR}/${subj}/mri/${h}.gwdist${istr}.volfrac.mgz \
+                  #${SUBJECTS_DIR}/${subj}/surf/${h}.gwdist \
+                  #${SUBJECTS_DIR}/${subj}/surf/${h}.gwdist${istr}.myelin"
+      #${FREESURFER_HOME}/bin/mris_compute_layer_intensities -${h} \
+                  #${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+                  #${SUBJECTS_DIR}/${subj}/mri/${h}.gwdist${istr}.volfrac.mgz \
+                  #${SUBJECTS_DIR}/${subj}/surf/${h}.gwdist \
+                  #${SUBJECTS_DIR}/${subj}/surf/${h}.gwdist${istr}.myelin
+   #done
+   #((i++))
+#done
+#for h in lh rh ; do
+   #${FREESURFER_HOME}/bin/mri_compute_layer_fractions \
+                  #-nlayers 6 \
+                  #-s ${subj} \
+                  #identity.nofile \
+                  #${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+                  #yyy.mgz
+#done
+

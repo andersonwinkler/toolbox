@@ -29,7 +29,7 @@ HEMI="lh rh"
 
 # Surfaces (up to v5.3.0; increase the list as needed for future versions)
 SURF="inflated inflated.nofix orig orig.nofix pial qsphere.nofix smoothwm smoothwm.nofix sphere sphere.reg sphere.SD.reg white"
-SURF="inflated inflated_avg pial sphere.reg.avg sphere.reg white"
+SURF="inflated inflated_avg pial sphere sphere.reg.avg sphere.reg white"
 
 # Curvatures (up to v5.3.0; increase the list as needed for future versions)
 CURV="area area.mid area.pial avg_curv curv curv.pial inflated.H inflated.K jacobian_white smoothwm.BE.crv smoothwm.C.crv smoothwm.FI.crv smoothwm.H.crv smoothwm.K1.crv smoothwm.K2.crv smoothwm.K.crv smoothwm.S.crv sulc thickness volume w-g.pct.mgh"

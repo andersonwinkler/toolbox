@@ -1,4 +1,4 @@
-#!/usr/bin/env octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function dpxhist(varargin)
 % Generate a histogram for a combined set of DPV/DPF files,
 % ignoring NaN/Inf values. The result is saved to a PNG file.
@@ -45,7 +45,7 @@ end
 
 % Number of datapoints (faces or vertices)
 nD    = numel(dpx);
-didx  = ~isnan(dpx);% & ~isinf(dpx);
+didx  = ~isnan(dpx) & ~isinf(dpx);
 nvoid = sum(~didx);
 
 % Print combined statistics
@@ -61,11 +61,8 @@ fprintf('Sum:      %f\n\n',sum(dpx(didx)));
 
 % Make the histogram
 if ~isempty(varargin{1}),
-    [fpth,fnam,fext]=fileparts(varargin{1});
     f = figure('Visible','off');
-    %edg = linspace(0,.5,100); n = histc(dpx(didx),edg); bar(edg,n);
     hist(dpx(didx),100);
-    title(fnam);
     print('-dpng','-r100',varargin{1});
     close(f);
     fprintf('Histogram saved as %s\n',varargin{1});

@@ -1,0 +1,3 @@
+warning('off','Octave:shadowed-function')
+addpath(fullfile(fileparts(mfilename('fullpath')),'..','share'));
+more off
