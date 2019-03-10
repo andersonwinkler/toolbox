@@ -1,4 +1,4 @@
-#!/usr/local/apps/octave/4.4.0/bin/octave -q
+#!/usr/bin/octave -q
 % function dpx2avg(varargin)
 % For a set of data-per-face (DPF) or data-per-vertex (DPV) files,
 % compute their average and standard deviation.

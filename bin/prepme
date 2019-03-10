@@ -4,7 +4,11 @@ if [ -z "$1" ]; then
 cat <<EOU
 Prepare multi-echo files for later analyses.
 
-Usage: prepme [input files]
+Usage: prepme \\
+       -i <echo1.nii.gz> -i <echo2.nii.gz> -i <...>   \\
+       [-j <echo1.json>] [-j <echo2.json>] [-j <...>] \\
+       [-r <tr>] [-t <slice_timings>]                 \\
+       [-d <del_vols>] [-f <bet_f>]
 
 The inputs are 4D image files, one per echo. The first file
 entered is the reference (usually the 1st echo).
@@ -20,65 +24,82 @@ EOU
 exit 1
 fi
 
-# Step 0: Remove file extension from file names:
 ECHO_IN=""
-for e in ${@} ; do
-	ECHO_IN="${ECHO_IN} $(${FSLDIR}/bin/remove_ext ${e})"
+ECHO_JS=""
+TR=""
+ST=""
+DELVOLS=0
+BETF=0.5
+
+# Check and accept the arguments
+while getopts 'i:j:r:t:d:f:' OPTION
+do
+  case ${OPTION} in
+    i) ECHO_IN="${ECHO_IN} ${OPTARG}" ;;
+    j) ECHO_JS="${ECHO_JS} ${OPTARG}" ;;
+    r) TR=${OPTARG} ;;
+    t) ST=${OPTARG} ;;
+    d) DELVOLS=${OPTARG} ;;
+    f) BETF=${OPTARG} ;;
+  esac
 done
+
+# Step 0: Remove file extension from file names:
+tmp=""
+for e in ${ECHO_IN} ; do
+	tmp="${tmp} $(${FSLDIR}/bin/remove_ext ${e})"
+done
+ECHO_IN=(${tmp})
 
 echo "Step 1: Slice timing correction"
-for e in ${ECHO_IN} ; do
-	TR=$(${FSLDIR}/bin/fslinfo ${e} | grep ^pixdim4 | awk '{print $2}')
-	${FSLDIR}/bin/slicetimer -i ${e} -o ${e}_step1 -r ${TR} --odd
-done
-
-echo "Step 2: Removal of non-steady state scans"
-nrem=0
-if [[ ${nrem} -ne 0 ]] ; then
-	for e in ${ECHO_IN} ; do
-		dim4=$(${FSLDIR}/bin/fslinfo ${e} | grep ^dim4 | awk '{print $2}')
-		nvols=$(expr ${dim4} - ${nrem})
-		${FSLDIR}/bin/fslroi ${e}_step1 ${e}_step2 ${nrem} ${nvols}
+if [[ -z "${TR}" ]] ; then
+	TR=$(${FSLDIR}/bin/fslinfo ${ECHO_IN[0]} | grep ^pixdim4 | awk '{print $2}')
+fi
+if [[ -z "${ST}" ]] ; then
+	for e in ${ECHO_IN[@]} ; do
+		${FSLDIR}/bin/slicetimer -i ${e} -o ${e}_step1 -r ${TR} --odd
 	done
 else
-	for e in ${ECHO_IN} ; do
+	for e in ${ECHO_IN[@]} ; do
+		${FSLDIR}/bin/slicetimer -i ${e} -o ${e}_step1 -r ${TR} --tcustom=${ST}
+	done
+fi
+
+echo "Step 2: Removal of non-steady state scans"
+if [[ ${DELVOLS} -ne 0 ]] ; then
+	for e in ${ECHO_IN[@]} ; do
+#		dim4=$(${FSLDIR}/bin/fslinfo ${e} | grep ^dim4 | awk '{print $2}')
+#		nvols=$(expr ${dim4} - ${DELVOLS})
+#		${FSLDIR}/bin/fslroi ${e}_step1 ${e}_step2 ${DELVOLS} ${nvols}
+		${FSLDIR}/bin/fslroi ${e}_step1 ${e}_step2 ${DELVOLS} -1
+	done
+else
+	for e in ${ECHO_IN[@]} ; do
 		${FSLDIR}/bin/imln ${e}_step1 ${e}_step2
 	done
 fi
 
 echo "Step 3: Motion correction with MCFLIRT"
 enum=1
-for e in ${ECHO_IN} ; do
+for e in ${ECHO_IN[@]} ; do
 	if [[ ${enum} -eq 1 ]] ; then
 		e1=${e}
 		${FSLDIR}/bin/mcflirt -in ${e1}_step2 -out ${e1}_step3 -mats
-		if [[ -e ${e}_step3.mat/MAT_0000 ]] ; then
-			for m in ${e1}_step3.mat/MAT_* ; do
-				mv ${m} ${m/MAT_/MAT_0}
-			done
-		fi
-		${FSLDIR}/bin/fslroi ${e1}_step2 temp 0 1
+		cat ${e1}_step3.mat/MAT_* > ${e1}_step3.mtx
+		#if [[ -e ${e}_step3.mat/MAT_0000 ]] ; then
+		#	for m in ${e1}_step3.mat/MAT_* ; do
+		#		mv ${m} ${m/MAT_/MAT_0}
+		#	done
+		#fi
+		${FSLDIR}/bin/fslroi ${e1}_step2 ${e1}_step2_vol1 0 1
 		((enum++))
-	else
-		${FSLDIR}/bin/applyxfm4D ${e}_step2 temp ${e}_step3 ${e1}_step3.mat 1> /dev/null
 	fi
+	#${FSLDIR}/bin/applyxfm4D ${e}_step2 ${e1}_temp ${e}_step3 ${e1}_step3.mat 1> /dev/null
+	${FSLDIR}/bin/applywarp -i ${e}_step2 -r ${e1}_step2_vol1 -o ${e}_step3 --premat=${e1}_step3.mtx 1> /dev/null
 done
-${FSLDIR}/bin/imrm temp
+${FSLDIR}/bin/imrm ${e1}_step2_vol1
 
-echo "Step 4: Averaging of timeseries of first echo and BET"
-${FSLDIR}/bin/fslmaths ${e1}_step3 -Tmean ${e1}_step4_avg
-${FSLDIR}/bin/bet ${e1}_step4_avg ${e1}_step4_brain -m -f 0.5
-
-echo "Step 5: Application of mask to all others (and linking of .json files)"
-for e in ${ECHO_IN} ; do
-	${FSLDIR}/bin/fslmaths ${e}_step3 -mas ${e1}_step4_brain_mask ${e}_step5
-	[[ -f ${e}.json ]] && ln -s ${e}.json ${e}_step3.json
-	[[ -f ${e}.json ]] && ln -s ${e}.json ${e}_step5.json
-done
-
-#echo "Step 6: Concatenate across space and run MELODIC"s
-#LIST="" ; for e in ${ECHO_IN} ; do LIST="${LIST} ${e}_step5" ; done
-#${FSLDIR}/bin/fslmerge -x xmerged_s6 ${LIST}
-#LIST="" ; for e in ${ECHO_IN} ; do LIST="${LIST} ${e1}_step4_brain_mask" ; done
-#${FSLDIR}/bin/fslmerge -x xmerged_s6_mask ${LIST}
-#${FSLDIR}/bin/melodic -i xmerged_s6 -o xmerged_s6 --Oall --nobet --mask xmerged_s6_mask 
+echo "Final step: Averaging of timeseries of first echo BET, and mask"
+${FSLDIR}/bin/fslmaths ${e1}_step3 -Tmean ${e1}_step3_avg
+${FSLDIR}/bin/bet ${e1}_step3_avg ${e1}_step3_brain -m -f ${BETF}
+${FSLDIR}/bin/fslmaths ${e1}_step3 -bin -Tmean -thr 1 -bin -mul ${e1}_step3_brain_mask ${e1}_main_mask
