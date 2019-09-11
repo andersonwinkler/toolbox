@@ -16,8 +16,8 @@ function [lEvec,rEvec,Evals,xtras] = epca(varargin)
 %         variance normalised to unity.
 %
 % Outputs:
-% lEvec : Left singular vectors.
-% rEvec : Right singular vectors.
+% lEvec : Left singular vectors (= loadings for the rEvec)
+% rEvec : Right singular vectors (= loadings for the lEvec).
 % Evals : Eigenvalues.
 % xtras : A struct containing the eigenvectors scaled
 %         by their eigenvalues, and the data recovered
@@ -77,19 +77,19 @@ end
 % Save some memory by working with the
 % smallest possible square of X
 if nR >= nC,
-    [~,SS,V] = svd(X'*X);
+    [~,SS,V] = svd(X'*X,0);
     Vp  = V(:,1:p);
     SSp = SS(1:p,1:p);
     Up  = X*Vp;
 else
-    [U,SS,~] = svd(X*X');
+    [U,SS,~] = svd(X*X',0);
     Up  = U(:,1:p);
     SSp = SS(1:p,1:p);
     Vp  = X'*Up;
 end
 
 % Pick one sign
-s = sign(sum(Vp(:,1)));
+s = diag(sign(Up(1,:)));
 
 % Eigenvectors and eigenvalues
 lEvec = Up*s;

@@ -8,19 +8,24 @@ of the regions of FreeSurfer's subcortical segmentation.
 Both FSL and FreeSurfer are necessary. Make sure your variables
 \$FSLDIR, \$FREESURFER_HOME and \$SUBJECTS_DIR have been configured.
 
-Usage: asegpve -s <subjid> [-p <prefix>]
+Usage: asegpve -s <subjid> [-p <prefix>] [opts]
 
 -s <subjid>   : Subject (already processed with recon-all). More than
                 one can be supplied with multiple -s.
 -p <prefix>   : File prefix for the outputs. Files will be named
                 "{prefix}_{class}.csv", where {class} can be
                 0, 1 or 2, for gm, wm, or csf respectively.
-                Default is simply "./prefix"
+                Default is simply "./output"
+-a            : Do for the amygdala nuclei.
+-g            : Do for the amygdala nuclei.
+-h            : Do for the hippocampal subfields.
+-t            : Do for the thalamic nuclei.
 
 _____________________________________
 Anderson M. Winkler
 National Institutes of Health (NIH/NIMH)
-Aug/2018
+Aug/2018 (first version)
+Sep/2019 (this version)
 http://brainder.org
 EOU
 exit 1
@@ -29,69 +34,96 @@ fi
 # Check and accept the input arguments
 SBJLIST=""
 PREFIX="output"
-while getopts 's:p:' OPTION
+PARC=""
+PVELIST="1 2" # CSF=0, GM=1, WM=2
+while getopts 's:p:aghtd:' OPTION
 do
-  case ${OPTION} in
-    s) SBJLIST=$( [[ -f ${OPTARG} ]] && cat ${OPTARG} || echo "${SBJLIST} ${OPTARG}" ) ;;
-    p) PREFIX=${OPTARG} ;;
-  esac
+   case ${OPTION} in
+      s) SBJLIST=$( [[ -f ${OPTARG} ]] && cat ${OPTARG} || echo "${SBJLIST} ${OPTARG}" ) ;;
+      p) PREFIX=${OPTARG} ;;
+      a) PARC="${PARC} aseg" ;;
+      g) PARC="${PARC} amyg" ;;
+      h) PARC="${PARC} hipp" ;;
+      t) PARC="${PARC} thal" ;;
+      d) SUBJECTS_DIR=${OPTARG} ;;
+   esac
 done
 
-# Check early on if crucial files are missing
-MISS="N"
-for subj in ${SBJLIST} ; do
-  for f in ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz \
-           ${SUBJECTS_DIR}/${subj}/mri/aseg.mgz \
-           ${SUBJECTS_DIR}/${subj}/stats/aseg.stats ; do
-    if [[ ! -f ${f} ]] ; then
-      echo "File not found: ${f}"
-      MISS="Y"
-    fi
-  done
-done
-if [[ "${MISS}" == "Y" ]] ; then
-  echo "Error: Cannot continue due to files missing as above."
-  exit 1
+if [[ -z ${SBJLIST} ]] || [[ -z ${PARC} ]] ; then
+   echo "Insufficient arguments given."
+   exit 1
 fi
+
+declare -A LABLIST
+declare -A LABNAMES
+declare -A LABFILE
+
+# List of labels
+LABLIST[aseg]="4 5 7 8 10 11 12 13 14 15 16 17 18 24 26 28 30 31 43 44 46 47 49 50 51 52 53 54 58 60 62 63 72 77 78 79 80 81 82 85 251 252 253 254 255"
+LABLIST[hipp]="203 211 212 215 226 233 234 235 236 237 238 239 240 241 242 243 244 245 246"
+LABLIST[amyg]="7001 7003 7005 7006 7007 7008 7009 7010 7015"
+LABLIST[thal]="8103 8104 8105 8106 8108 8109 8110 8111 8112 8113 8115 8116 8117 8118 8120 8121 8122 8123 8126 8127 8128 8129 8133 \
+               8203 8204 8205 8206 8208 8209 8210 8211 8212 8213 8215 8216 8217 8218 8220 8221 8222 8223 8226 8227 8228 8229 8233"
+
+# File names with the segmentations
+LABFILE[aseg]=aseg.mgz
+LABFILE[amyg]="lh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz rh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz"
+LABFILE[hipp]="lh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz rh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz"
+LABFILE[thal]=ThalamicNuclei.v10.T1.FSvoxelSpace.mgz
+
+# Create headers for the output files
+for parc in ${PARC} ; do
+   LABNAMES[${parc}]=$(awk 'BEGIN {ORS=","} NR==FNR {A[$1]=1 ; next} $1 in A {print $2}' \
+                  <(echo ${LABLIST[${parc}]}|tr " " "\n") \
+                  <(cat  ${FREESURFER_HOME}/FreeSurferColorLUT.txt))
+   for labfile in ${LABFILE[${parc}]} ; do
+      for pve in ${PVELIST} ; do
+         echo "bids_name,${LABNAMES[${parc}]%?}" > ${PREFIX}_${parc}_${labfile%.mgz}_pve${pve}.csv
+      done
+   done
+done
 
 # For each subject
 for subj in ${SBJLIST} ; do
-  echo "Working on subject ${subj}"
-
-  # Convert from MGZ to NIFTI
-  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
-                       ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz \
-                       ${SUBJECTS_DIR}/${subj}/tmp/brainmask.nii.gz
-  ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
-                       ${SUBJECTS_DIR}/${subj}/mri/aseg.mgz \
-                       ${SUBJECTS_DIR}/${subj}/tmp/aseg.nii.gz
-
-  # Segment
-  echo "- Segmenting with FAST."
-  ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/tmp/brainmask
-  
-  # Create separate volumes for each label
-  LABLIST=$(awk '/^[^#]/ {print $2}' ${SUBJECTS_DIR}/${subj}/stats/aseg.stats)
-  LABNAMES=$(awk 'BEGIN { ORS="," } /^[^#]/ {print $5}' ${SUBJECTS_DIR}/${subj}/stats/aseg.stats)
-  hdr="subject,${LABNAMES%?}"
-  for lab in ${LABLIST} ; do
-      ${FSLDIR}/bin/fslmaths ${SUBJECTS_DIR}/${subj}/tmp/aseg \
-                             -thr ${lab} -uthr ${lab} -bin \
-                             ${SUBJECTS_DIR}/${subj}/tmp/aseg_${lab}
-  done
-  
-  # Compute the partial volumes
-  for pve in 0 1 2 ; do
-  echo "- Working on tissue class ${pve}."
-    echo ${hdr} > ${PREFIX}_${pve}.csv
-    M="${subj}"
-    for lab in ${LABLIST} ; do
-      m=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/tmp/brainmask_pve_${pve} \
-                              -k ${SUBJECTS_DIR}/${subj}/tmp/aseg_${lab} -m)
-      M="${M},${m//[[:blank:]]/}"
-    done
-    echo ${M} >> ${PREFIX}_${pve}.csv
-  done
-  ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/brainmask* ${SUBJECTS_DIR}/${subj}/tmp/aseg*
+   echo "Working on subject ${subj}"
+   if [[ -f ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz ]] ; then
+      echo "- Converting file format."
+      ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+                           ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz \
+                           ${SUBJECTS_DIR}/${subj}/tmp/brainmask.nii.gz
+      echo "- Segmenting with FAST."
+      ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/tmp/brainmask
+      for parc in ${PARC} ; do
+         for labfile in ${LABFILE[${parc}]} ; do
+            if [[ -f ${SUBJECTS_DIR}/${subj}/mri/${labfile} ]] ; then
+               echo "- Creating separate volumes for ${parc} (${labfile})."
+               ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+                                ${SUBJECTS_DIR}/${subj}/mri/${labfile} \
+                                ${SUBJECTS_DIR}/${subj}/tmp/${labfile/.mgz/.nii.gz}
+               for lab in ${LABLIST[${parc}]} ; do
+                  ${FSLDIR}/bin/fslmaths ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz} \
+                                        -thr ${lab} -uthr ${lab} -bin \
+                                         ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}_${lab}
+               done
+               for pve in ${PVELIST} ; do
+                  echo "- Working on tissue class ${pve} for ${parc} (${labfile})."
+                  M="${subj}"
+                  for lab in ${LABLIST[${parc}]} ; do
+                     m=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/tmp/brainmask_pve_${pve} \
+                                             -k ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}_${lab} -m)
+                     M="${M},${m//[[:blank:]]/}"
+                  done
+                  echo ${M} >> ${PREFIX}_${parc}_${labfile%.mgz}_pve${pve}.csv
+               done
+               ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}*
+            else
+               echo "- File not found: ${SUBJECTS_DIR}/${subj}/mri/${LABFILE[${parc}]}. Skipping ${parc}."
+            fi
+         done
+      done
+      ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/brainmask*
+   else
+      echo "- File not found: ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz. Skipping subject ${subj}"
+   fi
 done
 echo "Done!"

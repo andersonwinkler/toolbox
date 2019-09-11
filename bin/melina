@@ -7,11 +7,10 @@ subject has been processed using either T2 or FLAIR images.
 
 Usage: melina -s <subjid> [options]
 
--s <subjid>   : Subject (already processed with recon-all). More than
-                one can be supplied with multiple -s.
--t <seq>      : Optional. Indicate whether T2 or FLAIR should be used.
-                If not supplied, it will try T2 first, and if not
-                available, it will try FLAIR.
+-s <subjid>   : Subject (already processed with recon-all).
+-t <seq>      : Optional. Indicate whether T2 or FLAIR should be
+                used.  If not supplied compute a measurement of 
+                gray/white contrast.
 -f <projfrac> : Fractional projection along normal. Can be between
                 0 and 1, with 0 being white and 1 pial. Can take
                 negative values (in which case it goes deep into
@@ -35,65 +34,159 @@ fi
 subj=""
 PF_LIST=""
 PD_LIST=""
-t2flair=""
+TYPE=""
 while getopts 's:t:f:d:' OPTION
 do
   case ${OPTION} in
     s) subj=${OPTARG} ;;
-    t) t2flair=${OPTARG} ;;
+    t) TYPE=${OPTARG} ;;
     f) PF_LIST="${PF_LIST} ${OPTARG}" ;;
     d) PD_LIST="${PD_LIST} ${OPTARG}" ;;
   esac
 done
 [[ ${PF_LIST} == "" ]] && PF_LIST=0.5
 [[ ${PD_LIST} == "" ]] && PD_LIST=1.0
-if [[ ${t2flair} == "" ]] ; then
-   if   [[ -f ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz ]] ; then
-      t2flair=T2
-   elif [[ -f ${SUBJECTS_DIR}/${subj}/mri/FLAIR.prenorm.mgz ]] ; then
-      t2flair=FLAIR
-   else
-      echo "Error: Neither FLAIR or T2 images found for subject ${subj}."
-      exit 1;
-   fi
-elif [[ ! -f ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz ]] ; then
-   echo "Error: File not found: ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz"
-   exit 1;
+if [[ ${TYPE} == "T2" ]] && [[ ! -f ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz ]] ; then
+   echo "Error! File ${SUBJECTS_DIR}/${subj}/mri/T2.prenorm.mgz does not exist."
+   exit 1
+fi
+if [[ ${TYPE} == "FLAIR" ]] && [[ ! -f ${SUBJECTS_DIR}/${subj}/mri/FLAIR.prenorm.mgz ]] ; then
+   echo "Error! File ${SUBJECTS_DIR}/${subj}/mri/FLAIR.prenorm.mgz does not exist."
+   exit 1
 fi
 
-# Compute the ratio T1/T2 or T1/FLAIR
-echo "===============[ STEP 1 ]================================"
-echo ${FREESURFER_HOME}/bin/fscalc \
-     ${SUBJECTS_DIR}/${subj}/mri/orig.mgz div \
-     ${SUBJECTS_DIR}/${subj}/mri/${t2flair}.prenorm.mgz \
-     --o ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
+if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
 
-# Project to the surface, using fraction of distance between white (0) and pial (1)
-echo "===============[ STEP 2A ]================================"
-for pf in ${PF_LIST} ; do
-   [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr=".f${pf}" || pfstr=""
-   for h in lh rh ; do
-      echo ${FREESURFER_HOME}/bin/mri_vol2surf \
-         --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --projfrac ${pf} --interp trilinear \
-         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pfstr}.mgz
-   done
-done
+   # Compute the myelin surrogate
+   ${FREESURFER_HOME}/bin/fscalc \
+       ${SUBJECTS_DIR}/${subj}/mri/orig.mgz div \
+       ${SUBJECTS_DIR}/${subj}/mri/${TYPE}.prenorm.mgz \
+       --o ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
 
-# Project to the surface, using a distance from the white.
-echo "===============[ STEP 2B ]================================"
-for pd in ${PD_LIST} ; do
-   [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pdstr=".d${pd}mm" || pdstr=""
-   for h in lh rh ; do
-      echo ${FREESURFER_HOME}/bin/mri_vol2surf \
-         --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
-         --regheader ${subj} --projdist ${pd} --interp trilinear \
-         --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin${pdstr}.mgz
+   # Project to the surface, using fraction of distance between white (0) and pial (1)
+   for pf in ${PF_LIST} ; do
+      pfstr="f_${pf}"
+      for h in lh rh ; do
+         ${FREESURFER_HOME}/bin/mri_vol2surf \
+            --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+            --regheader ${subj} --projfrac ${pf} --interp trilinear \
+            --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pfstr}.mgz
+         ${FREESURFER_HOME}/bin/mris_convert -c \
+            ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pfstr}.mgz \
+            ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
+            ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pfstr}
+         rm -f ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pfstr}.mgz
+      done
    done
-done
+
+   # Project to the surface, using a distance from the white.
+   for pd in ${PD_LIST} ; do
+      pdstr="d_${pd}mm"
+      for h in lh rh ; do
+         ${FREESURFER_HOME}/bin/mri_vol2surf \
+            --mov ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz \
+            --regheader ${subj} --projdist ${pd} --interp trilinear \
+            --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pdstr}.mgz
+         ${FREESURFER_HOME}/bin/mris_convert -c \
+            ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pdstr}.mgz \
+            ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
+            ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pdstr}
+         rm -f ${SUBJECTS_DIR}/${subj}/surf/${h}.myelin.${pdstr}.mgz
+      done
+   done
+
+else
+
+   # Project to the surface, using fraction of distance between white (0) and pial (1)
+   PF_LIST="0.1 0.2 0.3 0.4 0.5 0.6"
+   for pf in ${PF_LIST} ; do
+      [[ $(echo ${PF_LIST}|wc -w) -gt 1 ]] && pfstr="f_${pf}" || pfstr=""
+      for h in lh rh ; do
+         ${FREESURFER_HOME}/bin/mri_vol2surf \
+            --mov ${SUBJECTS_DIR}/${subj}/mri/nu.mgz \
+            --regheader ${subj} --projfrac ${pf} --interp trilinear \
+            --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.${pfstr}.mgz
+      done
+   done
+
+   # Project to the surface, using a distance from the white.
+   PD_LIST="0.15 0.30 0.45 0.60 0.75 0.90 1.05 1.20 1.35 1.50"
+   for pd in ${PD_LIST} ; do
+      [[ $(echo ${PD_LIST}|wc -w) -gt 1 ]] && pdstr="d_${pd}mm" || pdstr=""
+      for h in lh rh ; do
+         ${FREESURFER_HOME}/bin/mri_vol2surf \
+            --mov ${SUBJECTS_DIR}/${subj}/mri/nu.mgz \
+            --regheader ${subj} --projdist -${pd} --interp trilinear \
+            --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.${pdstr}.mgz
+      done
+   done
+
+   for h in lh rh ; do
+   ${FREESURFER_HOME}/bin/fscalc \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.1.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.2.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.3.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.4.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.5.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.6.mgz div 6 \
+      --o ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_avg.mgz
+   ${FREESURFER_HOME}/bin/fscalc \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.15mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.30mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.45mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.60mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.75mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.90mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.05mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.20mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.35mm.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.50mm.mgz div 10 \
+      --o ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_avg.mgz
+   ${FREESURFER_HOME}/bin/fscalc \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_avg.mgz sub \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_avg.mgz mul 100 \
+      --o ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.diff.mgz
+   ${FREESURFER_HOME}/bin/fscalc \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_avg.mgz add \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_avg.mgz div 2 \
+      --o ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.mean.mgz
+   ${FREESURFER_HOME}/bin/fscalc \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.diff.mgz div \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.mean.mgz \
+      --o ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.mgz
+   ${FREESURFER_HOME}/bin/mris_convert -c \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc
+
+   rm -rf \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.1.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.2.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.3.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.4.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.5.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_0.6.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.15mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.30mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.45mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.60mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.75mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_0.90mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.05mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.20mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.35mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_1.50mm.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.graylayer.f_avg.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.whitelayer.d_avg.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.diff.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.mean.mgz \
+      ${SUBJECTS_DIR}/${subj}/surf/${h}.gwc.mgz
+   done
+fi
+
 
 ## Compute the partial volume effects of the cortical mantle.
-#echo "===============[ STEP C ]================================"
+
 #for h in lh rh ; do
    #for surf in white pial ; do
       ## The parameter that goes with "-acc" below is the 
@@ -113,7 +206,6 @@ done
 
 
 # xx
-#echo "===============[ STEP D ]================================"
 #i=0
 #for pf in ${PF_LIST} ; do
    #istr=$(printf %03d ${i})

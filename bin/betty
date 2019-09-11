@@ -44,6 +44,6 @@ else
    ${FSLDIR}/bin/flirt -in  ${in}_origtmp         -ref ${in} -omat ${in}_orig2in.mat
    ${FSLDIR}/bin/flirt -in  ${in}_${FS_STRUCT}tmp -ref ${in} -init ${in}_orig2in.mat -applyxfm -out ${in}_${FS_STRUCT}2intmp
    ${FSLDIR}/bin/fslmaths   ${in}_${FS_STRUCT}2intmp -bin -mul ${in} ${in}_brain
-   ${FSLDIR}/bin/imrm ${in}_origtmp ${in}_${FS_STRUCT}tmp ${in}_${FS_STRUCT}2intmp
+   ${FSLDIR}/bin/imrm ${in}_${FS_STRUCT}2intmp ${in}_origtmp ${in}_${FS_STRUCT}tmp 
    rm ${in}_orig2in.mat
 fi

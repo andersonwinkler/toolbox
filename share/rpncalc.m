@@ -12,7 +12,7 @@ function rpncalc(varargin)
 %   Multiplicative (matrix): **, //, \\ and ^^
 %   Logic: <, >, <=. >=, ==, ~=
 %   Comparisons: min, max
-% Mathematical operators (unary): log, ln, exp, isnan, isinf, sign
+% Mathematical operators (unary): log, ln, exp, isnan, isinf
 % Stack manipulation: swap dup drop
 % File operations: load save
 %
@@ -36,9 +36,8 @@ if exist('OCTAVE_VERSION','builtin') ~= 0,
 
     % Get the inputs
     varargin = argv();
-    nargin = numel(varargin);
-
 end
+nargin = numel(varargin);
 
 % Print usage if no inputs are given
 if isempty(varargin) || strcmp(varargin{1},'-q'),
@@ -193,7 +192,7 @@ for a = 1:nargin,
         
     elseif strcmpi('log',varargin{a});
         
-        % LOGARITHM (10)
+        % LOGARITHM
         
         % Compute the log of the 1st element in the stack
         fprintf('Taking the base-10 logarithm.\n')
@@ -201,7 +200,7 @@ for a = 1:nargin,
         
     elseif strcmpi('ln',varargin{a});
         
-        % LOGARITHM (NATURAL)
+        % LOGARITHM
         
         % Compute the log of the 1st element in the stack
         fprintf('Taking the natural logarithm.\n')
@@ -214,14 +213,6 @@ for a = 1:nargin,
         % Compute the log of the 1st element in the stack
         fprintf('Exponentiating.\n')
         stack{1} = exp(stack{1});
-
-    elseif strcmpi('sign',varargin{a});
-        
-        % SIGN
-        
-        % Compute the log of the 1st element in the stack
-        fprintf('Taking the sign.\n')
-        stack{1} = sign(stack{1});
 
     elseif strcmpi('isnan',varargin{a});
         
