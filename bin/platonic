@@ -1,4 +1,4 @@
-#!/usr/local/apps/octave/4.4.0/bin/octave -q
+#!/usr/bin/octave -q
 % function platonic(varargin)
 % Create one of the five Platonic polyhedra (tetrahedron, hexahedron,
 % octahedron, dodecahedron and icosahedron) OR a geodesic sphere by

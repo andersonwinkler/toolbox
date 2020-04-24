@@ -1,6 +1,6 @@
 function [cc,A,B,U,V] = cca(X,Y,df)
 % Do CCA via QR & SVD.
-% 
+%
 % Usage:
 % [cc,A,B,U,V] = cca(X,Y,df)
 %
@@ -18,7 +18,6 @@ function [cc,A,B,U,V] = cca(X,Y,df)
 %           be no larger than N-1. For speed, it is not
 %           tested internally, though, so enter this
 %           wisely.
-% 
 % Outputs:
 % cc       : Canonical correlations.
 % A and B  : Canonical coefficients.
@@ -31,7 +30,7 @@ function [cc,A,B,U,V] = cca(X,Y,df)
 % * Bjorck A, Golub GH. Numerical methods for
 %   computing angles between linear subspaces.
 %   Math Comput. 1973;27(123):579-579.
-% 
+%
 % _____________________________________
 % Anderson M. Winkler
 % National Institutes of Health

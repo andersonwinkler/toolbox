@@ -7,3 +7,4 @@ share/parula.m
 .DS_Store
 bin/.DS_Store
 share/.DS_Store
+bin/procme

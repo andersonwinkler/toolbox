@@ -24,10 +24,10 @@ def printHelp(argv, description): # ===========================================
     print("-o : Output prefix, which will be used to name the output files.")
     print("-m : Mask (a 3D NIFTI file).")
     print("-s : Do spatially instead of temporally")
-    print("-r : Regress out the 2nd input from the 1st. That is, in the GLM given by")
-    print("     Y = X*b+res, the first '-i' becones Y, and the second '-i' becomes X.")
-    print("     The output are the residuals. Before regression, both X and Y are")
-    print("     mean-centered.")
+    print("-r : Instead of computing the correlations, regress out the 2nd input from")
+    print("     the 1st. That is, in the GLM given by Y = X*b+res, the first '-i'")
+    print("     becones Y, and the second '-i' becomes X. The outputs are the residuals.")
+    print("     of this fit. Before regression, both X and Y aremean-centered.")
     print("")
     print("This tool will compute the voxelwise correlation between two 4D NIFTI files,")
     print("and will also provide voxelwise maps of 3 parameters computed from the")
@@ -56,7 +56,7 @@ def printHelp(argv, description): # ===========================================
 def parseArguments(argv): # ===================================================
 
     # Parse arguments
-    description = "Compute temporal or spatial correlations."
+    description = "Compute temporal or spatial correlations, or regress one voxelwise image from another."
     if len (argv) <= 1:
         printHelp(argv, description)
     else:

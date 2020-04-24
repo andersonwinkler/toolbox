@@ -1,4 +1,4 @@
-#!/usr/local/apps/octave/4.4.0/bin/octave -q
+#!/usr/bin/octave -q
 % function icodown(varargin)
 % Downsample a data-per-vertex (DPV), data-per-face (DPF) or
 % surface (SRF) in ASCII format from a higher-order tessellated

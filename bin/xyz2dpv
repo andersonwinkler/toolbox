@@ -1,4 +1,4 @@
-#!/usr/local/apps/octave/4.4.0/bin/octave -q
+#!/usr/bin/octave -q
 % function xyz2dpv(varargin)
 % Takes the (X,Y,Z) coordinates from a surface file
 % and save as a DPV file. Three DPV files are created,

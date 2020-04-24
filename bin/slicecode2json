@@ -1,0 +1,70 @@
+#!/usr/bin/env python3.6
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Jul 29 14:55:49 2018
+
+@author: winkleram
+"""
+import sys, os
+import numpy as np
+
+if len(sys.argv) < 4:
+    execname = os.path.basename(sys.argv[0])
+    print("Takes TR, number of slices, and slice_code (as in the NIFTI header")
+    print("and print the timings for each slice, in the order as acquired, to")
+    print("be included in the BIDS JSON file that pairs up with the BOLD file.")
+    print("")
+    print("Usage:")
+    print("")
+    print(execname + ' <TR> <#slices> <slice_code>')
+    print("")
+    print("TR         : Repetition time, i.e., time (in seconds) between two")
+    print("             consecutive volumes.")
+    print("#slices    : Number of slices (an integer).")
+    print("slice_code : An integer between 1 and 6 (inclusive) indicating the")
+    print("             slice_code as used in the NIFTI standard.")
+    print("")
+    print("The output is printed in the screen and can be inserted into the")
+    print("respective JSON file.")
+    print("There is presently no support for padded slices (who uses it anyway?")
+    print("or for multiband acquisitions,")
+    print("")
+    print("_____________________________________")
+    print("Anderson M. Winkler")
+    print("National Institutes of Health")
+    print("Jul/2018")
+    print("http://brainder.org")
+    exit(1)
+
+TR         = float(sys.argv[1])
+num_slices = int(sys.argv[2])   
+slice_code = int(sys.argv[3])
+times      = np.arange(0,TR,TR/num_slices)
+
+if   slice_code == 1:
+    slice_idx = np.arange(0,num_slices,1)
+elif slice_code == 2:
+    slice_idx = np.arange(num_slices,0,-1)-1
+elif slice_code == 3:
+    slice_idx = np.concatenate((
+            np.arange(0,num_slices,2),
+            np.arange(1,num_slices,2)))
+elif slice_code == 4:
+        slice_idx = np.concatenate((
+            np.arange(num_slices,0,-2),
+            np.arange(num_slices-1,0,-2)))-1
+elif slice_code == 5:
+    slice_idx = np.concatenate((
+            np.arange(1,num_slices,2),
+            np.arange(0,num_slices,2)))
+elif slice_code == 6:
+    slice_idx = np.concatenate((
+            np.arange(num_slices-1,0,-2),
+            np.arange(num_slices,0,-2)))-1
+else:
+    print("Unknown slice_code: " + slice_code)
+
+slice_timing = np.zeros_like(times)
+slice_timing[slice_idx] = times
+
+print('"SliceTiming": [' + ', '.join(map(str,slice_timing)) + '],\n')
