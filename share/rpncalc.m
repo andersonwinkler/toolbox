@@ -36,9 +36,8 @@ if exist('OCTAVE_VERSION','builtin') ~= 0,
 
     % Get the inputs
     varargin = argv();
-    nargin = numel(varargin);
-
 end
+nargin = numel(varargin);
 
 % Print usage if no inputs are given
 if isempty(varargin) || strcmp(varargin{1},'-q'),

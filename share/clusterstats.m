@@ -1,16 +1,19 @@
-function clusterstats(varargin)
+function clusterstats2(varargin)
 % Extract the sum or mean for the vertices or faces
 % of a DPX file, masked by a DPX file that defines
 % clusters.
 % 
 % Usage:
-% clusterstats(clusterfile,dpxfile,meas,measout,sizeout);
+% clusterstats(clusterfile,clusterthr,dpxfile,meas,measout,sizeout);
 % 
 % clusterfile : File that determines the clusters.
+% clusterthr  : Threshold that defines clusters. If empty or NaN,
+%               assumes that the clusterfile has already been
+%               binarized and labelled.
 % dpxfile     : DPV or DPF file from which statistics
 %               will be computed.
 % meas        : Measurement to report: 'sum' or 'mean'
-% measout     : Line containing the means or averages for each
+% measout     : Line containing the sums or means for each
 %               region, separated by a comma
 % sizeout     : File with sizes of each cluster (i.e., number
 %               of faces or vertices for DPF or DPV respectively)
@@ -64,10 +67,11 @@ try
 end
 
 % Defaults
-d.dpxfile = [];     % arg 2
-d.meas    = 'mean'; % arg 3
-d.measout = 1;      % arg 4
-d.sizeout = 1;      % arg 5
+d.clusterthr = [];     % arg 2
+d.dpxfile    = [];     % arg 3
+d.meas       = 'mean'; % arg 4
+d.measout    = 1;      % arg 5
+d.sizeout    = 1;      % arg 6
 
 % Accept arguments
 nargin = numel(varargin);
@@ -76,17 +80,18 @@ if nargin > 5,
 end
 v = struct(             ...
     'clusterfile', [],  ...  % arg 1
-    'dpxfile',     [],  ...  % arg 2
-    'meas',        [],  ...  % arg 3
-    'measout',     [],  ...  % arg 4
-    'sizeout',     []);      % arg 5
+    'clusterthr',  [],  ...  % arg 2
+    'dpxfile',     [],  ...  % arg 3
+    'meas',        [],  ...  % arg 4
+    'measout',     [],  ...  % arg 5
+    'sizeout',     []);      % arg 6
 fields = fieldnames(v);
 for a = 1:nargin,
     v.(fields{a}) = varargin{a};
 end
 
 % Accept some defaults if needed
-for a = 2:5,
+for a = 2:6,
     if isempty(v.(fields{a})),
         v.(fields{a}) = d.(fields{a});
     end
@@ -97,11 +102,12 @@ if ~ isempty(v.dpxfile),
     dpx = dpxread(v.dpxfile);
 end
 clu = dpxread(v.clusterfile);
+
 nC  = max(clu);
 
 % Compute the stats
 s = zeros(nC+1,1);   m = s;
-for c = 0:nC;
+for c = 0:nC
     if c == 0,
         mask = clu >= c;
     else

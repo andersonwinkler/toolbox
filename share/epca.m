@@ -16,12 +16,14 @@ function [lEvec,rEvec,Evals,xtras] = epca(varargin)
 %         variance normalised to unity.
 %
 % Outputs:
-% lEvec : Left singular vectors.
-% rEvec : Right singular vectors.
+% lEvec : Left singular vectors (= loadings for the rEvec)
+% rEvec : Right singular vectors (= loadings for the lEvec).
 % Evals : Eigenvalues.
 % xtras : A struct containing the eigenvectors scaled
 %         by their eigenvalues, and the data recovered
-%         after the p+1...rank(X) dimensions were removed.
+%         after the p+1...rank(X) dimensions were removed,
+%         and the amount of variance explained by each
+%         eigenvector.
 %
 % This function was called "pca", but after Matlab created its
 % own similarly-named "pca" function, it was renamed to "epca",
@@ -77,19 +79,19 @@ end
 % Save some memory by working with the
 % smallest possible square of X
 if nR >= nC,
-    [~,SS,V] = svd(X'*X);
+    [~,SS,V] = svd(X'*X,0);
     Vp  = V(:,1:p);
     SSp = SS(1:p,1:p);
     Up  = X*Vp;
 else
-    [U,SS,~] = svd(X*X');
+    [U,SS,~] = svd(X*X',0);
     Up  = U(:,1:p);
     SSp = SS(1:p,1:p);
     Vp  = X'*Up;
 end
 
 % Pick one sign
-s = sign(sum(Vp(:,1)));
+s = diag(sign(Up(1,:)));
 
 % Eigenvectors and eigenvalues
 lEvec = Up*s;
@@ -115,4 +117,8 @@ if nargout == 4,
     % Recovered data using the p eigenvectors
     xtras.lRec = Up*xtras.rScal;
     xtras.rRec = xtras.lScal*Vp';
+    
+    % Variance explained
+    S = diag(SS)./(nR-1);
+    xtras.explained = S./sum(S);
 end
