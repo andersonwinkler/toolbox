@@ -1,0 +1,346 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Sep  4 16:57:35 2020
+
+@author: winkleram
+"""
+
+import os
+import sys
+import argparse
+import json
+import pandas as pd
+import glob
+from shutil import copyfile
+from natsort import natsorted, ns
+
+
+def printHelp(argv, description): # ===========================================
+
+    # Print help. This is meant to be called from parseArguments
+    print(description)
+    print("")
+    print("Usage:")
+    print("{} -n <dirin> -b <dirout>".format(argv[0]))
+    print("")
+    print("-n : Input NIDB directory, with .nii.gz and .json files.")
+    print("-b : Output BIDS directory.")
+    print("")
+    print("_____________________________________")
+    print("Anderson M. Winkler")
+    print("National Institutes of Health")
+    print("Sep/2020")
+    print("http://brainder.org")
+    exit(1)
+
+def parseArguments(argv): # ===================================================
+
+    # Parse arguments
+    description = "Convert the input NIDB directory into BIDS."
+    if len (argv) <= 1:
+        printHelp(argv, description)
+    else:
+        epilog = "Run without arguments for basic usage information."
+        parser = argparse.ArgumentParser(description=description, epilog=epilog)
+        parser.add_argument('-n', '--nidb',      help="Input NIDB directory.",
+                            type=str, dest='dirin', action='store', required=True)
+        parser.add_argument('-b', '--bids',      help="Output BIDS directory.",
+                            type=str, dest='dirout', action='store', required=True)
+        parser.add_argument('-r', '--renumber',  help="Re-number sessions, runs and echos to 1, 2, etc...",
+                            dest='renumber', action='store_true', required=False)
+        args = parser.parse_args(argv[1:])
+        return args
+
+def readjson(jsonfile): # =====================================================
+    with open(jsonfile, 'r') as fp:
+        J = json.load(fp)
+    return J
+
+def writejson(J, jsonfile): # =================================================
+    with open(jsonfile, 'w') as fp:
+        json.dump(J, fp, indent=2)
+    return
+
+def link2copy(file): # ========================================================
+    # Replaces a hard link for an actual copy of the file
+    pth, nam = os.path.split(file)
+    tmpfile = os.path.join(pth, '{}.tmp'.format(nam))
+    copyfile(file, tmpfile)
+    os.remove(file)
+    os.rename(tmpfile, file)
+    return
+
+def isbidsfile(filename): # ===================================================
+    fnam, fext = os.path.splitext(filename)
+    if fext == '.gz':
+        fnam, fext = os.path.splitext(fnam)
+        fext = fext + '.gz'
+    if fext in ['.json', '.nii', '.nii.gz', '.bvec', '.bval', '.tsv']:
+        isit = True
+    else:
+        isit = False
+    fnam = os.path.basename(fnam)
+    return isit, fnam, fext
+
+def simplifystring(S):  # =====================================================
+    special_chars = [' ', '-', '_', '.', '+', '(', ')']
+    for c in special_chars:
+        S = S.replace(c, '')
+    S = S.lower()
+    return S
+
+def cleanentity(curdir, f, entity='run'): # ==================================
+    # Drop redundant entities such as 'run' or 'echo', and rename
+    # them to sequential numbers where they're not dropped.
+    fnam, fext = os.path.splitext(f)
+    if fext == '.gz':
+        fnam, fext = os.path.splitext(fnam)
+        fext = fext + '.gz'
+    ftok = fnam.split('_')
+    for idxt, t in enumerate(ftok):
+        if t.startswith('{}-'.format(entity)):
+            ftok[idxt] = '{}-*'.format(entity)
+    flist = glob.glob(os.path.join(curdir, '_'.join(ftok) + fext))
+    flist.sort()
+    if isinstance(flist, list):
+        if len(flist) == 1 and entity != 'ses': # note the exception for ses
+            for idxt, t in enumerate(ftok):
+                if t.startswith('{}-'.format(entity)):
+                    ftok.pop(idxt)
+        else:
+            idxf = flist.index(os.path.join(curdir, fnam + fext)) + 1
+            for idxt, t in enumerate(ftok):
+                if t.startswith('{}-'.format(entity)):
+                    ftok[idxt] = '{}-{}'.format(entity, idxf)
+    newfnam = '_'.join(ftok)
+    oldfile = os.path.join(curdir, fnam + fext)
+    newfile = os.path.join(curdir, newfnam + fext)
+    return oldfile, newfile
+
+
+# ============================================================================
+#   MAIN FUNCTION
+# ============================================================================
+
+# Parse arguments
+args = parseArguments(sys.argv)
+print(args)
+
+# Read mapping table
+#nidb2sdan = pd.read_csv('~/bin/map_ids_nidb2sdan.csv')
+nidb2sdan = pd.read_csv('/data/EDB/opt/map_ids_nidb2sdan.csv')
+
+# Create output directory and populate it with hard links to the original files
+if not os.path.isdir(args.dirout):
+    os.makedirs(args.dirout)
+for curdir, subdirs, files in os.walk(args.dirin):
+    for f in files:
+        if isbidsfile(f)[0]:
+            print('{} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
+            if not os.path.isfile(os.path.join(args.dirout, f)):
+                print('Creating link: {} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
+                os.link(os.path.join(curdir, f), os.path.join(args.dirout, f))
+            else:
+                print('Target already exists: {} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
+            #os.chmod(os.path.join(args.dirout, f), 0o660)
+
+# For each file in the newly created BIDS dir:
+prev_nidb_id = ''
+for curdir, subdirs, files in os.walk(args.dirout):
+
+    # For each file in the current directory
+    for f in natsorted(files, alg=ns.IGNORECASE):
+
+        # Check if the current file could belong to BIDS and if it's a JSON
+        isfbids, oldfnam, fext = isbidsfile(f)
+        if isfbids and fext == '.json':
+
+            # This is the NIDB ID, from the file name
+            nidb_id, studynum, seriesnum, serialnum = oldfnam.split('_')
+
+            # This is the corresponding SDAN ID, from an automatically updated table
+            # that maps one ID into another.
+            sdan_id = nidb2sdan.loc[nidb2sdan['NIDB_UID'] == nidb_id, 'SDAN_ID'].values[0]
+
+            # Read the JSON and collect as much information as needed. These pieces
+            # will be used for renaming later:
+            J = readjson(os.path.join(args.dirout, f))
+            series_description = ''
+            acquisition_date   = ''
+            acquisition_time   = ''
+            echo_time          = ''
+            if 'SeriesDescription' in J:
+                series_description = simplifystring(J['SeriesDescription'])
+            if 'AcquisitionDateTime' in J:
+                acquisition_date, acquisition_time = J['AcquisitionDateTime'].split('T')
+                acquisition_date = acquisition_date.replace('-','')
+                acquisition_time = acquisition_time.replace(':','')
+            if 'EchoTime' in J:
+                echo_time = '{0:.4f}'.format(J['EchoTime']).replace('0.', '')
+
+            # Now prepare to rename according to the type of file
+            substr  = 'sub-{}'.format(sdan_id) # subject ID
+            sesstr  = '' # string to store the session number
+            taskstr = '' # string sto store the task name
+            runstr  = '' # string to store the run number
+            subdir  = '' # string to store the subdirectory for this type of image
+            recstr  = '' # string to store the kind of reconstruction
+            dirstr  = '' # string to store the direction of phase enconding
+            echstr  = '' # strong to store the echo time
+            modstr  = '' # string to store the type of modality
+            if acquisition_date != '':
+                sesstr = '_ses-{}'.format(acquisition_date)
+            if acquisition_time != '':
+                runstr = '_run-{}'.format(acquisition_time)
+
+            if 'mprage' in series_description: # ------------------------------
+                # This is an MPRAGE
+                subdir = 'anat'
+                modstr = '_T1w'
+                if  series_description.startswith('orig'):
+                    recstr = '_rec-orig'
+                else:
+                    recstr = '_rec-norm'
+
+            elif 'distortioncorrection' in series_description: # --------------
+                # These are distortion correction scans
+                subdir = 'fmap'
+                modstr = '_epi'
+                if   'matching' in series_description:
+                    dirstr = '_dir-matching'
+                elif 'opposite' in series_description:
+                    dirstr = '_dir-opposite'
+
+            elif 'rest' in series_description and \
+                not 'distortioncorrection' in series_description: # -----------
+                # This is resting state FMRI
+                subdir  = 'func'
+                modstr  = '_bold'
+                taskstr = '_task-rest'
+                if echo_time != '':
+                    echstr = '_echo-{}'.format(echo_time)
+
+            elif 'recall23runs272reps' in series_description: # ---------------
+                # This is the ExtinctionRecall2 task
+                subdir  = 'func'
+                modstr  = '_bold'
+                taskstr = '_task-ER2'
+
+            elif 'francis' in series_description and \
+                'task' in series_description: # -------------------------------
+                # This is Francis task (movie)
+                subdir  = 'func'
+                modstr  = '_bold'
+                taskstr = '_task-francis'
+                if echo_time != '':
+                    echstr = '_echo-{}'.format(echo_time)
+
+            else: # -----------------------------------------------------------
+                print('Skipping: {}{} ({})'.format(oldfnam, fext, series_description))
+                continue
+            newfnam = '{}{}{}{}{}{}{}{}'.format(substr, sesstr, taskstr, recstr, dirstr, runstr, echstr, modstr)
+
+            # Add the "intended for" to the fmap json files
+            if nidb_id != prev_nidb_id:
+                juststored = True
+            if  subdir == 'func':
+                if juststored:
+                    intendedfor = []
+                    juststored = False
+                intendedfor.append(os.path.join(subdir, '{}.nii.gz'.format(newfnam)))
+            elif subdir == 'fmap':
+                link2copy(os.path.join(curdir, f))
+                J = readjson(os.path.join(curdir, f))
+                J['IntendedFor'] = intendedfor
+                writejson(J, os.path.join(curdir, f))
+                juststored = True
+            prev_nidb_id = nidb_id
+
+            # Rename the json and imaging file
+            for iext in ['.json', '.nii.gz']:
+                oldfile = os.path.join(args.dirout, '{}{}'.format(oldfnam, iext))
+                newfile = os.path.join(args.dirout, substr, sesstr[1:], subdir, '{}{}'.format(newfnam, iext))
+                if os.path.isfile(oldfile):
+                    newdir, newname = os.path.split(newfile)
+                    if not os.path.isdir(newdir):
+                        os.makedirs(newdir)
+                    print('Moving: {} -> {}'.format(oldfile, newfile))
+                    os.rename(oldfile, newfile)
+
+
+# Renumber ses, run, echo, to 1, 2, 3, etc.
+# This part will only run if the "-r" option is given
+if args.renumber:
+    # Cleanup echo and run numbers
+    for entity in ['echo', 'run']:
+        oldlist = []
+        newlist = []
+        for curdir, subdirs, files in os.walk(args.dirout):
+            for f in files:
+                oldfile, newfile = cleanentity(curdir, f, entity=entity)
+                oldlist.append(oldfile)
+                newlist.append(newfile)
+        for curdir, subdirs, files in os.walk(args.dirout):
+            for f in files:
+                if curdir.endswith('fmap') and f.endswith('.json'):
+                    funcdir = os.path.join(os.path.split(curdir)[0], 'func')
+                    J = readjson(os.path.join(curdir, f))
+                    for iidx, inam in enumerate(J['IntendedFor']):
+                        ifnam = os.path.split(inam)[-1]
+                        ofnam = os.path.join(funcdir, ifnam)
+                        if ofnam in oldlist:
+                            oidx = oldlist.index(ofnam)
+                            J['IntendedFor'][iidx] = os.path.join('func', os.path.split(newlist[oidx])[-1])
+                    writejson(J, os.path.join(curdir, f))
+        for i in range(0, len(oldlist)):
+            print('Renaming: {} -> {}'.format(oldlist[i],  newlist[i]))
+            os.rename(oldlist[i],  newlist[i])
+
+    # Cleanup session numbers
+    # Deal with the directories ses-* first
+    oldlist = []
+    newlist = []
+    for curdir, subdirs, files in os.walk(args.dirout, topdown=False):
+        for d in subdirs:
+            oldfile, newfile = cleanentity(curdir, d, entity='ses')
+            if newfile != oldfile:
+                oldlist.append(oldfile)
+                newlist.append(newfile)
+    for i in range(0, len(oldlist)):
+        print('Renaming: {} -> {}'.format(oldlist[i],  newlist[i]))
+        os.rename(oldlist[i],  newlist[i])
+    # Then deal with the files
+    oldlist = []
+    newlist = []
+    for curdir, subdirs, files in os.walk(args.dirout):
+        dtok = curdir.split('/')
+        for idxt, t in enumerate(dtok):
+            if t.startswith('ses-'):
+                sesstr = t
+        for f in files:
+            ftok = f.split('_')
+            for idxt, t in enumerate(ftok):
+                if t.startswith('ses-'):
+                    ftok[idxt] = sesstr
+            oldfile = os.path.join(curdir, f)
+            newfile = os.path.join(curdir, '_'.join(ftok))
+            if newfile != oldfile:
+                oldlist.append(oldfile)
+                newlist.append(newfile)
+                print('Renaming: {} -> {}'.format(oldfile, newfile))
+                os.rename(oldfile, newfile)
+    # Now rename the 'IntendFor' inside the .json
+    for curdir, subdirs, files in os.walk(args.dirout):
+        for f in files:
+            if curdir.endswith('fmap') and f.endswith('.json'):
+                funcdir = os.path.join(os.path.split(curdir)[0], 'func')
+                J = readjson(os.path.join(curdir, f))
+                for iidx, inam in enumerate(J['IntendedFor']):
+                    ifnam = os.path.split(inam)[-1]
+                    ofnam = os.path.join(funcdir, ifnam)
+                    if ofnam in oldlist:
+                        oidx = oldlist.index(ofnam)
+                        J['IntendedFor'][iidx] = os.path.join('func', os.path.split(newlist[oidx])[-1])
+                writejson(J, os.path.join(curdir, f))
+
