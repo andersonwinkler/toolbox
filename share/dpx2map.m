@@ -56,10 +56,10 @@ if exist('OCTAVE_VERSION','builtin') ~= 0,
     sigterm_dumps_octave_core(0);
 
     % Get the inputs
-    if isempty(varargin),
+    if ~ exist('varargin','var') || isempty(varargin),
         varargin = argv();
     end
- 
+
 end
 
 % Print usage if no inputs are given
@@ -343,13 +343,13 @@ else
     fprintf(fid,'%g %g %g %d %d %d\n',vtx2ply');
     fprintf(fid,'%d %d %d %d\n',fac2ply');
     fclose(fid);
-   
+
 end
 
 % Now for the colourbar
 %if ~isoctave && all(v.imgsize),
 if all(v.imgsize),
-    
+
     % Simulate data for display purposes
     dpx = linspace(dpxmin,dpxmax,max(v.imgsize))';
 
@@ -382,7 +382,7 @@ if all(v.imgsize),
             cidx(cidx <= sidx(2) & cidx > sidx(1)) = mapsize + 1;
         end
     end
-    
+
     % Save the colourbar, as PNG
     pngfile = sprintf('%s.png',v.oprefix);
     fprintf('Saving PNG: %s\n',pngfile);
