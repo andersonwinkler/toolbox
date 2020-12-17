@@ -14,6 +14,7 @@ import pandas as pd
 import glob
 from shutil import copyfile
 from natsort import natsorted, ns
+import nibabel as nib
 
 
 def printHelp(argv, description): # ===========================================
@@ -33,7 +34,7 @@ def printHelp(argv, description): # ===========================================
     print("Sep/2020")
     print("http://brainder.org")
     exit(1)
-
+    
 def parseArguments(argv): # ===================================================
 
     # Parse arguments
@@ -62,6 +63,12 @@ def writejson(J, jsonfile): # =================================================
         json.dump(J, fp, indent=2)
     return
 
+def readhdr(niftifile): # =====================================================
+    nii = nib.load(niftifile)
+    dim = nii.header.get_data_shape()
+    pixdim = nii.header.get_zooms()
+    return dim, pixdim
+
 def link2copy(file): # ========================================================
     # Replaces a hard link for an actual copy of the file
     pth, nam = os.path.split(file)
@@ -84,7 +91,7 @@ def isbidsfile(filename): # ===================================================
     return isit, fnam, fext
 
 def simplifystring(S):  # =====================================================
-    special_chars = [' ', '-', '_', '.', '+', '(', ')']
+    special_chars = [' ', '-', '_', '.', '+', '(', ')', '/']
     for c in special_chars:
         S = S.replace(c, '')
     S = S.lower()
@@ -104,7 +111,7 @@ def cleanentity(curdir, f, entity='run'): # ==================================
     flist = glob.glob(os.path.join(curdir, '_'.join(ftok) + fext))
     flist.sort()
     if isinstance(flist, list):
-        if len(flist) == 1 and entity != 'ses': # note the exception for ses
+        if len(flist) == 1 and entity != 'ses': # note the exception for ses, as we always need a ses-1
             for idxt, t in enumerate(ftok):
                 if t.startswith('{}-'.format(entity)):
                     ftok.pop(idxt)
@@ -119,17 +126,27 @@ def cleanentity(curdir, f, entity='run'): # ==================================
     return oldfile, newfile
 
 
-# ============================================================================
+# =============================================================================
 #   MAIN FUNCTION
-# ============================================================================
+# =============================================================================
 
 # Parse arguments
 args = parseArguments(sys.argv)
-print(args)
 
-# Read mapping table
-#nidb2sdan = pd.read_csv('~/bin/map_ids_nidb2sdan.csv')
-nidb2sdan = pd.read_csv('/data/EDB/opt/map_ids_nidb2sdan.csv')
+# Get a mapping between NIDB UID and AltUIDs
+altuid = next(os.walk(args.dirin))[1]
+altuid.sort()
+nidb = []
+for sid in altuid:
+    for curdir, subdirs, files in os.walk(os.path.join(args.dirin, sid)):
+        for f in files:
+            nid = f.split('_')[0]
+            if nid not in nidb:
+                nidb.append(nid)
+nidb2altuid = pd.DataFrame.from_dict({
+                        'NIDB_UID': nidb,
+                        'AltUID'  : altuid})
+nidb2altuid = nidb2altuid.set_index('NIDB_UID')
 
 # Create output directory and populate it with hard links to the original files
 if not os.path.isdir(args.dirout):
@@ -145,24 +162,32 @@ for curdir, subdirs, files in os.walk(args.dirin):
                 print('Target already exists: {} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
             #os.chmod(os.path.join(args.dirout, f), 0o660)
 
+D = {}
 # For each file in the newly created BIDS dir:
-prev_nidb_id = ''
 for curdir, subdirs, files in os.walk(args.dirout):
-
+    
     # For each file in the current directory
     for f in natsorted(files, alg=ns.IGNORECASE):
-
+        
         # Check if the current file could belong to BIDS and if it's a JSON
         isfbids, oldfnam, fext = isbidsfile(f)
         if isfbids and fext == '.json':
-
-            # This is the NIDB ID, from the file name
+            
+            # This is the NIDB ID and a few other info, from the file names:
             nidb_id, studynum, seriesnum, serialnum = oldfnam.split('_')
-
-            # This is the corresponding SDAN ID, from an automatically updated table
-            # that maps one ID into another.
-            sdan_id = nidb2sdan.loc[nidb2sdan['NIDB_UID'] == nidb_id, 'SDAN_ID'].values[0]
-
+            
+            # Create dictionary entries to store all stuff
+            if nidb_id not in D:
+                D[nidb_id] = {}
+            if studynum not in D[nidb_id]:
+                D[nidb_id][studynum] = pd.DataFrame(columns=[
+                        'seriesnum','serialnum','series_description',
+                        'acquisition_date','acquisition_time','echo_time','newfnam','datatype'])
+    
+            # Start populating the fields
+            D[nidb_id][studynum].loc[oldfnam,'seriesnum'] = seriesnum
+            D[nidb_id][studynum].loc[oldfnam,'serialnum'] = serialnum
+            
             # Read the JSON and collect as much information as needed. These pieces
             # will be used for renaming later:
             J = readjson(os.path.join(args.dirout, f))
@@ -172,103 +197,932 @@ for curdir, subdirs, files in os.walk(args.dirout):
             echo_time          = ''
             if 'SeriesDescription' in J:
                 series_description = simplifystring(J['SeriesDescription'])
+                D[nidb_id][studynum].loc[oldfnam,'series_description'] = series_description
             if 'AcquisitionDateTime' in J:
                 acquisition_date, acquisition_time = J['AcquisitionDateTime'].split('T')
                 acquisition_date = acquisition_date.replace('-','')
                 acquisition_time = acquisition_time.replace(':','')
+                D[nidb_id][studynum].loc[oldfnam,'acquisition_date'] = acquisition_date
+                D[nidb_id][studynum].loc[oldfnam,'acquisition_time'] = acquisition_time
             if 'EchoTime' in J:
                 echo_time = '{0:.4f}'.format(J['EchoTime']).replace('0.', '')
-
+                D[nidb_id][studynum].loc[oldfnam,'echo_time'] = echo_time
+            if 'ScanOptions' in J:
+                scan_options = J['ScanOptions']
+                D[nidb_id][studynum].loc[oldfnam,'scan_options'] = scan_options
+            
+            # Read the NIFTI file and collect some information from the header
+            dim, pixdim = readhdr(os.path.join(args.dirout, f).replace('.json','.nii.gz'))
+            D[nidb_id][studynum].loc[oldfnam,'dimi']    = dim[0]
+            D[nidb_id][studynum].loc[oldfnam,'dimj']    = dim[1]
+            D[nidb_id][studynum].loc[oldfnam,'dimk']    = dim[2]
+            D[nidb_id][studynum].loc[oldfnam,'pixdimi'] = round(pixdim[0]*100)/100
+            D[nidb_id][studynum].loc[oldfnam,'pixdimj'] = round(pixdim[1]*100)/100
+            D[nidb_id][studynum].loc[oldfnam,'pixdimk'] = round(pixdim[2]*100)/100
+            
             # Now prepare to rename according to the type of file
-            substr  = 'sub-{}'.format(sdan_id) # subject ID
-            sesstr  = '' # string to store the session number
-            taskstr = '' # string sto store the task name
-            runstr  = '' # string to store the run number
-            subdir  = '' # string to store the subdirectory for this type of image
-            recstr  = '' # string to store the kind of reconstruction
-            dirstr  = '' # string to store the direction of phase enconding
-            echstr  = '' # strong to store the echo time
-            modstr  = '' # string to store the type of modality
+            substr   = 'sub-{}'.format(nidb2altuid.loc[nidb_id, 'AltUID']) # subject ID (AltUID)
+            sesstr   = '' # string to store the session number
+            taskstr  = '' # string sto store the task name
+            runstr   = '' # string to store the run number
+            datatype = '' # string to store the datatypeectory for this type of image
+            recstr   = '' # string to store the kind of reconstruction
+            dirstr   = '' # string to store the direction of phase enconding
+            echstr   = '' # strong to store the echo time
+            modstr   = '' # string to store the type of modality
             if acquisition_date != '':
                 sesstr = '_ses-{}'.format(acquisition_date)
             if acquisition_time != '':
                 runstr = '_run-{}'.format(acquisition_time)
+            has_fmap   = 'no'
+            multi_echo = False
 
-            if 'mprage' in series_description: # ------------------------------
-                # This is an MPRAGE
-                subdir = 'anat'
-                modstr = '_T1w'
-                if  series_description.startswith('orig'):
-                    recstr = '_rec-orig'
-                else:
+            # ===== ANATOMY ===================================================
+            print(series_description)
+            if 'anatt1wmprage1mm' in series_description: # --------------------
+                # This is a T1w
+                datatype = 'anat'
+                modstr   = '_T1w'
+                if   'FILTERED_GEMS' in scan_options:
                     recstr = '_rec-norm'
-
-            elif 'distortioncorrection' in series_description: # --------------
+                else:
+                    recstr = '_rec-orig'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif  'mprage'   in series_description or \
+                'anatomica'  in series_description or \
+                'fspgr'      in series_description or \
+                'bravo'      in series_description or \
+                'mprg'       == series_description: # -------------------------
+                # This is a T1w
+                datatype = 'anat'
+                modstr   = '_T1w'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 't1map' == series_description: # -----------------------------
+                datatype = 'anat'
+                modstr = '_T1w'
+                has_fmap = 'no'
+                multi_echo = False
+            
+            elif series_description.startswith('sagittal') and \
+                'pd' in series_description: # ---------------------------------
+                # This is a Proton Density
+                datatype = 'anat'
+                modstr = '_PD'
+                has_fmap = 'no'
+                multi_echo = False
+                
+            elif 'sagwholebraint2frfse' in series_description: # --------------
+                # This is a T2w
+                datatype = 'anat'
+                modstr   = '_T2w'
+                if   'FILTERED_GEMS' in scan_options:
+                    recstr = '_rec-norm'
+                else:
+                    recstr = '_rec-orig'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 't217mmfatsat' == series_description: # ----------------------
+                # This is a T2w
+                datatype = 'anat'
+                modstr = '_T2w'
+                has_fmap = 'no'
+                multi_echo = False
+                
+            elif 'anatt2wcube' in series_description: # -----------------------
+                # This is a T2w
+                datatype = 'anat'
+                modstr   = '_T2w'
+                if   'FILTERED_GEMS' in scan_options:
+                    recstr = '_rec-norm'
+                else:
+                    recstr = '_rec-orig'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'midaxt2flair1x1x4mm' in series_description: # ---------------
+                # This is a FLAIR
+                datatype = 'anat'
+                modstr   = '_FLAIR'
+                if   'FILTERED_GEMS' in scan_options:
+                    recstr = '_rec-norm'
+                else:
+                    recstr = '_rec-orig'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'flair' == series_description: # -----------------------------
+                # This is a FLAIR
+                datatype = 'anat'
+                modstr = '_FLAIR'
+                has_fmap = 'no'
+                multi_echo = False
+                
+            # ===== FIELDMAPS =================================================
+                
+            elif 'distortioncorrection' in series_description or \
+                 'fordistortion'        in series_description or \
+                 'oppositephaseencode'  in series_description or \
+                 'blipforward'          in series_description or \
+                 'blipreverse'          in series_description or \
+                 'blipup'               in series_description or \
+                 'blipdown'             in series_description or \
+                 'matchingpe'           in series_description or \
+                 'oppositepe'           in series_description: # --------------
                 # These are distortion correction scans
-                subdir = 'fmap'
-                modstr = '_epi'
-                if   'matching' in series_description:
+                datatype = 'fmap'
+                modstr   = '_epi'
+                if   'matching' in series_description or \
+                     'forward'  in series_description or \
+                     'blipup'   in series_description:
                     dirstr = '_dir-matching'
-                elif 'opposite' in series_description:
+                elif 'opposite' in series_description or \
+                     'reverse'  in series_description or \
+                     'blipdown' in series_description:
                     dirstr = '_dir-opposite'
+                has_fmap    = 'no'
+                multi_echo = False
+            
+            # ===== TASKS =====================================================
+            
+            elif 'fmrienc'       == series_description or \
+                 series_description.startswith('axialgreepirt') or \
+                 series_description.startswith('saggreepirt')   or \
+                 series_description.startswith('sagepirt')      or \
+                 'tricomi'       in series_description or \
+                 'knutson'       in series_description or \
+                 'hfloc'         == series_description or \
+                 'ebaloc'        == series_description: # ---------------------
+                # This is for unknown task protocols run in the past
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-unknown'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'morph' == series_description: # -----------------------------
+                # This is the "Morph" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-morph'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'dotprobe' == series_description: # --------------------------
+                # This is the "Dot Probe" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-DP'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'newdotprobeepi' == series_description: # --------------------
+                # This is the "New Dot Probe" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-newDP'
+                has_fmap   = 'no'
+                multi_echo = False
 
-            elif 'rest' in series_description and \
-                not 'distortioncorrection' in series_description: # -----------
-                # This is resting state FMRI
-                subdir  = 'func'
-                modstr  = '_bold'
-                taskstr = '_task-rest'
-                if echo_time != '':
-                    echstr = '_echo-{}'.format(echo_time)
+            elif 'stanforddotprobe' in series_description: # ------------------
+                # This is the "Stanford Dot Probe" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-stanfordDP'
+                has_fmap   = 'no'
+                multi_echo = False
+           
+            elif 'ba8ba12' == series_description: # ---------------------------
+                # This is the "BA8BA-12" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-ba8ba12'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'facesaxialgreepirt1run' == series_description: # ------------
+                # This is the "Faces" task (pilot only)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-faces'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'stop' in series_description and \
+                'greepirt8runs' in series_description: # ----------------------
+                # This is the "Stop" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-stop'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'newchatroomiirun' in series_description : # -----------------
+                # This is the "New Chatroom II" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-chatroom2'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'breathhold' == series_description : # -----------------------
+                # This is the "Breath-hold" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-breathhold'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'pd4runs' == series_description : # --------------------------
+                # This is the "PD" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-PD'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'affectivepriming' in series_description : # -----------------
+                # This is the "Affective Priming" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-AffectivePriming'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif series_description.startswith('foxdotprobe') : # -------------
+                # This is the "Affective Priming" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-foxDP'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'longtrial' in series_description: # -------------------------
+                # This is the "Fox Long Trial" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-foxlong'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'shorttrial' in series_description: # ------------------------
+                # This is the "Fox Short Trial" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-foxshort'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'parametricfaces4runs' == series_description: # --------------
+                # This is the "Parametric Faces" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-parafaces'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'context3runs' == series_description: # ----------------------
+                # This is the "Context" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-context'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'extinctionrecall2runs' == series_description or \
+                 'extinctionrecall3runs' == series_description: # -------------
+                # This is the "Extinction Recall" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-ER'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'rooms3runs' == series_description: # ------------------------
+                # This is the "Rooms" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-rooms'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'facelocalizer' == series_description: # ---------------------
+                # This is the "Face localizer" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-facelocalizer'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'motorlocalizer' == series_description: # --------------------
+                # This is the "Motor localizer" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-motorlocalizer'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif series_description.startswith('facerealtime'): # -------------
+                # This is the "Face realtime" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-facerealtime'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif series_description.startswith('motorrealtime'): # ------------
+                # This is the "Motor realtime" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-motorrealtime'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'weissman6runs' in series_description: # ---------------------
+                # This is the "Weissman" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-weissman'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'foxtrial4runs' in series_description: # ---------------------
+                # This is the "Fox trial" task (pilot?)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-foxtrial'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'affectiveposnergame3run' in series_description: # -----------
+                # This is the "Affective Posner Game" task (pilot?)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-affposner'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'conflictadaptation2runs' in series_description: # -----------
+                # This is the "Conflict Adaptation" task (pilot?)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-conflictadapt'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif series_description.startswith('amir'): # ---------------------
+                # This is the "Amir" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-amir'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'predictionerrors' in series_description: # ------------------
+                # This is the "Prediction Error" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-amir'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'gender3runs182reps' in series_description: # ----------------
+                # This is the "Gender" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-gender'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'pinata6runs' in series_description: # -----------------------
+                # This is the "Pinata" task (note 2 versions in the database)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-pinata'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'littlefoxdp4runs' in series_description: # ------------------
+                # This is the "Little Fox Dot-Probe" task (note multiple versions)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-lfDP'
+                has_fmap   = 'no'
+                multi_echo = False
 
+            elif 'littlefoxdp24runs111reps' in series_description: # ----------
+                # This is the "Little Fox Dot-Probe 2" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-lfDP2'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif 'littledp34runs111reps' == series_description or \
+                'littlefoxdp34runs111reps' == series_description: # -----------
+                # This is the "Little Fox Dot-Probe 3" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-lfDP3'
+                has_fmap   = 'after'
+                multi_echo = False
+            
+            elif 'labeling4runs226reps' in series_description: # --------------
+                # This is the "Labeling" task (note multiple versions)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-labeling'
+                has_fmap   = 'no'
+                multi_echo = False
+            
             elif 'recall23runs272reps' in series_description: # ---------------
-                # This is the ExtinctionRecall2 task
-                subdir  = 'func'
-                modstr  = '_bold'
-                taskstr = '_task-ER2'
+                # This is the "Extinction Recall 2" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-ER2'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'sagflanker28004runs' == series_description or \
+                'flanker4runs' == series_description: # -----------------------
+                # This is the "Flanker" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-flanker'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif '1mintriggertest' == series_description: # -------------------
+                # This is the "Trigger test"
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-trigger'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'affpos2runs' == series_description: # -----------------------
+                # This is the "Affective Posner" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-AP'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'tau2runs' == series_description: # --------------------------
+                # This is the TAU task (first protocol)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-TAU'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif series_description.startswith('virtualschool4runs') and \
+                series_description.endswith('reps'): # ------------------------
+                # This is the "Virtual School" task (first version)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-virtualschool'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'er2bells2runs343reps' == series_description: # --------------
+                # This is the "Extinction Recall/Bells" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-bells'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'signaldropoutevaluation' == series_description: # -----------
+                # This is the "Signal dropout evaluation" series
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-dropout'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'flankerarrow4runs' == series_description: # -----------------
+                # This is the "Flanker Arrow" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-flankerarrow'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'anticipationwi3runs' == series_description: # ---------------
+                # This is the "Anticipation (Wisconsin)" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-anticipation'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'flankerv24runs' in series_description: # --------------------
+                # This is the "Flanker 2" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-flanker2'
+                has_fmap   = 'no'
+                multi_echo = False
+               
+            elif 'virtualschoolv23runs' == series_description or \
+                'virtualschoolrepeat3runs' == series_description: # -----------
+                # This is the "Virtual School v2" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-virtualschool2'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'intbias3runs236reps' in series_description: # ---------------
+                # This is the Interaction Bias" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-intbias'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'labelingii4runs226reps' in series_description: # ------------
+                # This is the "Labeling II" task (note multiple versions)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-labeling2'
+                has_fmap   = 'no'
+                multi_echo = False
+                
+            elif 'thinslices' == series_description or \
+                'thinslices4runs' == series_description: # --------------------
+                # This is the "Thin slices" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-thinslices'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif 'changetask6runs165reps' == series_description: # ------------
+                # This is the "Change" task (note multiple versions)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-change'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif 'visualsearch' in series_description: # ----------------------
+                # This is the "Visual Search" task
+                if 'visualsearchx5runs' in series_description:
+                    datatype   = 'func'
+                    modstr     = '_bold'
+                    taskstr    = '_task-visualsearch'
+                    has_fmap   = 'no'
+                    multi_echo = False
+                elif 'visualsearch3runs' in series_description:
+                    datatype   = 'func'
+                    modstr     = '_bold'
+                    taskstr    = '_task-visualsearch'
+                    has_fmap   = 'after'
+                    multi_echo = False
+                
+            elif 'tau2runsfmrifepi3mm' in series_description: # ---------------
+                # This is the TAU2 task (new protocol)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-TAU2'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif 'mid11run' in series_description: # --------------------------
+                # This is the "Monetary Incentive Delay" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-MID1'
+                has_fmap   = 'after'
+                multi_echo = False # Check this
+                
+            elif series_description.startswith('shapes'): # -------------------
+                # This is the "Shapes" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                has_fmap   = 'after'
+                multi_echo = False
+                if   'firstrun196reps'  in series_description:
+                    taskstr = '_task-shapes1'
+                elif 'secondrun214reps' in series_description:
+                    taskstr = '_task-shapes2'
+                elif 'thirdrun214reps'  in series_description:
+                    taskstr = '_task-shapes3'
+                elif 'fourthrun136reps' in series_description:
+                    taskstr = '_task-shapes4'
+                elif 'fifthrun196reps'  in series_description:
+                    taskstr = '_task-shapes5'
+                
+            elif 'flankerv34runs' in series_description: # --------------------
+                # This is the "Flanker 3" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-flanker3'
+                has_fmap   = 'after'
+                multi_echo = False
 
-            elif 'francis' in series_description and \
-                'task' in series_description: # -------------------------------
-                # This is Francis task (movie)
-                subdir  = 'func'
-                modstr  = '_bold'
-                taskstr = '_task-francis'
-                if echo_time != '':
-                    echstr = '_echo-{}'.format(echo_time)
+            elif 'epitaskap32runs183reps' in series_description: # ------------
+                # This is the "Affective Posner 3" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-AP3'
+                has_fmap   = 'after'
+                multi_echo = True
+            
+            elif 'socialflanker4runs' in series_description: # ----------------
+                # This is the "Social Flanker" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-socialflanker'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif 'taskchange25runs183reps' == series_description: # -----------
+                # This is the "Change 2" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-change2'
+                has_fmap   = 'after'
+                multi_echo = True
+                
+            elif 'prr3runs' == series_description or \
+                'prrtaskfinal1run' == series_description: # -------------------
+                # This is the PRR task (note multiple versions)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-PRR'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif 'prrtask6runs' in series_description: # ----------------------
+                # This is the PRR task  (note multiple versions)
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-PRR'
+                has_fmap   = 'before'
+                multi_echo = False
+                
+            elif 'thepresent1run' in series_description: # --------------------
+                # This is the "The Present" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-thepresent'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            elif series_description.startswith('mmi'): # ----------------------
+                # This is the "MMI" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-MMI'
+                has_fmap   = 'before'
+                multi_echo = False
 
+            elif 'carnivalgame' in series_description: # ----------------------
+                # This is the "Carnival" task
+                datatype = 'func'
+                modstr   = '_bold'
+                if   'game1' in series_description: 
+                    taskstr = '_task-carnival1'
+                elif 'game2' in series_description: 
+                    taskstr = '_task-carnival2'
+                elif 'game3' in series_description: 
+                    taskstr = '_task-carnival3'
+                has_fmap   = 'before'
+                multi_echo = False
+            
+            elif 'francis' in series_description: # ---------------------------
+                # This is Francis task (movie) and the associated rest
+                datatype   = 'func'
+                modstr     = '_bold'
+                if 'metaskfrancisepi38mmisome' in series_description or \
+                    'francistaskepi38mmisome' in series_description: 
+                    taskstr  = '_task-francis'
+                    has_fmap = 'after'
+                elif 'merestfrancisepi38mmisome' in series_description or \
+                    'francisrestingepi38mmisome' in series_description:
+                    taskstr  = '_task-restpre'
+                    has_fmap = 'after'
+                elif 'francispostrestingepi38mmisome' in series_description:
+                    taskstr  = '_task-restpost'
+                    has_fmap = 'before'
+                multi_echo = True
+            
+            elif 'epitaskprofile2runs165reps' in series_description: # --------
+                # This is the "Profile" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-profile'
+                has_fmap   = 'before'
+                multi_echo = False
+            
+            elif 'er33runs' in series_description: # --------------------------
+                # This is the "Extinction Recall 3" task
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-ER3'
+                has_fmap   = 'after'
+                multi_echo = False
+
+            elif series_description.startswith('epitask'): # ------------------
+                # These are the 3 tasks of the Wisconsin project
+                datatype   = 'func'
+                modstr     = '_bold'
+                has_fmap   = 'before'
+                multi_echo = False
+                if   'epitask1' == series_description:
+                    taskstr = '_task-task1'
+                elif 'epitask2' == series_description:
+                    taskstr = '_task-task2'
+                elif 'epitask3' == series_description:
+                    taskstr = '_task-task3'
+
+            # ===== RESTING STATE =============================================
+            
+            elif 'restingme1run' == series_description: # ---------------------
+                # This is resting state FMRI, ME
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-rest'
+                has_fmap   = 'no'
+                multi_echo = True
+            
+            elif 'fmrifepi38mmisome' == series_description or \
+                'ap3restingepi38mmisome' == series_description or \
+                'axialmerestepi3mmiso' in series_description: # ---------------
+                # This is resting multi-echo
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-rest'
+                has_fmap   = 'after'
+                multi_echo = True
+            
+            elif series_description.startswith('epirest'): # ------------------
+                # These are the 2 resting state of the Wisconsin project
+                datatype   = 'func'
+                modstr     = '_bold'
+                has_fmap   = 'before'
+                multi_echo = False
+                if   'epiresting1' == series_description:
+                    taskstr = '_task-rest1'
+                elif 'epiresting2' == series_description:
+                    taskstr = '_task-rest2'
+            
+            elif 'resting' == series_description or \
+                 'resting1run' == series_description: # -----------------------
+                # This is resting state FMRI 
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-rest'
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif 'rest' in series_description and \
+                  not 'distortioncorrection' in series_description: # ---------
+                # This is resting state FMRI 
+                datatype   = 'func'
+                modstr     = '_bold'
+                taskstr    = '_task-rest'
+                has_fmap   = 'after'
+                multi_echo = False
+                
+            # ===== DIFFUSION =================================================
+            
+            elif series_description.startswith('edticdiflist') or \
+                 series_description.startswith('edtissgrcdif') or \
+                 series_description == 'uwdti': # -----------------------------
+                # This is diffusion (note multiple versions)
+                datatype   = 'dwi'
+                modstr     = '_dwi'
+                taskstr    = ''
+                has_fmap   = 'no'
+                multi_echo = False
+            
+            elif series_description.startswith('edti25mm62vol'): # ------------
+                # This is diffusion (note multiple versions)
+                datatype   = 'dwi'
+                modstr     = '_dwi'
+                has_fmap   = 'no'
+                multi_echo = False
+                if   series_description.endswith('ap'):
+                    taskstr    = '_dir-AP'
+                elif series_description.endswith('pa'):
+                    taskstr    = '_dir-PA'
+                else:
+                    taskstr    = ''
+            
             else: # -----------------------------------------------------------
                 print('Skipping: {}{} ({})'.format(oldfnam, fext, series_description))
-                continue
-            newfnam = '{}{}{}{}{}{}{}{}'.format(substr, sesstr, taskstr, recstr, dirstr, runstr, echstr, modstr)
+                datatype   = 'unknown'
+                modstr     = '_unknown'
+                taskstr    = ''
+                has_fmap   = 'no'
+                multi_echo = False
 
-            # Add the "intended for" to the fmap json files
-            if nidb_id != prev_nidb_id:
-                juststored = True
-            if  subdir == 'func':
+            
+            # For multi-echo data, get the echo time
+            if datatype == 'func' and multi_echo and echo_time != '':
+                echstr = '_echo-{}'.format(echo_time)
+            
+            newfnam = '{}{}{}{}{}{}{}{}'.format(substr, sesstr, taskstr, recstr, dirstr, runstr, echstr, modstr)
+            D[nidb_id][studynum].loc[oldfnam,'datatype'] = datatype
+            D[nidb_id][studynum].loc[oldfnam,'has_fmap'] = has_fmap
+            D[nidb_id][studynum].loc[oldfnam,'newfnam']  = newfnam
+            print('Provisional filenames: {} -> {}'.format(oldfnam, newfnam))
+
+# Deal with the rare cases of identical new filenames (e.g. mag/phase images from old fieldmaps)
+for nidb_id in D:
+    for studynum in D[nidb_id]:
+        indices = D[nidb_id][studynum].index.tolist()
+        newfname_orig = D[nidb_id][studynum]['newfnam'].copy()
+        mi = 1
+        for oldfnam in indices:
+            ma = sum(newfname_orig == D[nidb_id][studynum].loc[oldfnam,'newfnam'])
+            if ma > 1:
+                tok = D[nidb_id][studynum].loc[oldfnam,'newfnam'].split('_')
+                for t in tok:
+                    if t.startswith('run-'):
+                        D[nidb_id][studynum].loc[oldfnam,'newfnam'] = D[nidb_id][studynum].loc[oldfnam,'newfnam'].replace(t, '{}.{}'.format(t, mi))
+                mi = mi + 1
+            if mi == ma + 1:
+                mi = 1
+
+# Sort out the fieldmaps (add the IntendedFor field to the JSON)
+for nidb_id in D:
+    for studynum in D[nidb_id]:
+
+        # Do first for the fieldmaps after the functionals
+        intendedfor = []
+        juststored  = True
+        indices = D[nidb_id][studynum].index.tolist()
+        for oldfnam in indices:
+            if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] != 'no':
                 if juststored:
                     intendedfor = []
-                    juststored = False
-                intendedfor.append(os.path.join(subdir, '{}.nii.gz'.format(newfnam)))
-            elif subdir == 'fmap':
-                link2copy(os.path.join(curdir, f))
-                J = readjson(os.path.join(curdir, f))
-                J['IntendedFor'] = intendedfor
-                writejson(J, os.path.join(curdir, f))
+                    juststored  = False
+            if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] == 'after':
+                intendedfor.append(os.path.join('ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']), 
+                                                D[nidb_id][studynum].loc[oldfnam,'datatype'], 
+                                                '{}.nii.gz'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'])))
+            if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'fmap' and len(intendedfor) > 0:
+                link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                intendedfor.sort()
+                J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                if 'IntendedFor' in J:
+                    J['IntendedFor'] = J['IntendedFor'] + intendedfor
+                else:
+                    J['IntendedFor'] = intendedfor
+                writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
                 juststored = True
-            prev_nidb_id = nidb_id
+                
+        # Repeat for the fieldmaps before the functionals
+        intendedfor = []
+        juststored  = True
+        indices.reverse()
+        for oldfnam in indices:
+            if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] != 'no':
+                if juststored:
+                    intendedfor = []
+                    juststored  = False
+            if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] == 'before':
+                intendedfor.append(os.path.join('ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']), 
+                                                D[nidb_id][studynum].loc[oldfnam,'datatype'], 
+                                                '{}.nii.gz'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'])))
+            if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'fmap' and len(intendedfor) > 0:
+                intendedfor.sort()
+                link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                if 'IntendedFor' in J:
+                    J['IntendedFor'] = J['IntendedFor'] + intendedfor
+                else:
+                    J['IntendedFor'] = intendedfor
+                writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
+                juststored = True
 
-            # Rename the json and imaging file
-            for iext in ['.json', '.nii.gz']:
+# Rename the files, from the NIDB names to BIDS names.
+for nidb_id in D:
+    for studynum in D[nidb_id]:
+        for oldfnam in D[nidb_id][studynum].index:
+            for iext in ['.json', '.nii.gz', '.bvec', '.bval', '.tsv']:
                 oldfile = os.path.join(args.dirout, '{}{}'.format(oldfnam, iext))
-                newfile = os.path.join(args.dirout, substr, sesstr[1:], subdir, '{}{}'.format(newfnam, iext))
                 if os.path.isfile(oldfile):
+                    newfile = os.path.join(args.dirout, 
+                                           'sub-{}'.format(nidb2altuid.loc[nidb_id, 'AltUID']),
+                                           'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']),
+                                           D[nidb_id][studynum].loc[oldfnam,'datatype'],
+                                           '{}{}'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'], iext))
                     newdir, newname = os.path.split(newfile)
                     if not os.path.isdir(newdir):
                         os.makedirs(newdir)
-                    print('Moving: {} -> {}'.format(oldfile, newfile))
+                    #print('Moving: {} -> {}'.format(oldfile, newfile))
                     os.rename(oldfile, newfile)
-
-
+                    
 # Renumber ses, run, echo, to 1, 2, 3, etc.
 # This part will only run if the "-r" option is given
 if args.renumber:
@@ -286,13 +1140,14 @@ if args.renumber:
                 if curdir.endswith('fmap') and f.endswith('.json'):
                     funcdir = os.path.join(os.path.split(curdir)[0], 'func')
                     J = readjson(os.path.join(curdir, f))
-                    for iidx, inam in enumerate(J['IntendedFor']):
-                        ifnam = os.path.split(inam)[-1]
-                        ofnam = os.path.join(funcdir, ifnam)
-                        if ofnam in oldlist:
-                            oidx = oldlist.index(ofnam)
-                            J['IntendedFor'][iidx] = os.path.join('func', os.path.split(newlist[oidx])[-1])
-                    writejson(J, os.path.join(curdir, f))
+                    if 'IntendedFor' in J:
+                        for iidx, inam in enumerate(J['IntendedFor']):
+                            ifdir, ifnam = os.path.split(inam)
+                            ofnam = os.path.join(funcdir, ifnam)
+                            if ofnam in oldlist:
+                                oidx = oldlist.index(ofnam)
+                                J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
+                        writejson(J, os.path.join(curdir, f))
         for i in range(0, len(oldlist)):
             print('Renaming: {} -> {}'.format(oldlist[i],  newlist[i]))
             os.rename(oldlist[i],  newlist[i])
@@ -336,11 +1191,12 @@ if args.renumber:
             if curdir.endswith('fmap') and f.endswith('.json'):
                 funcdir = os.path.join(os.path.split(curdir)[0], 'func')
                 J = readjson(os.path.join(curdir, f))
-                for iidx, inam in enumerate(J['IntendedFor']):
-                    ifnam = os.path.split(inam)[-1]
-                    ofnam = os.path.join(funcdir, ifnam)
-                    if ofnam in oldlist:
-                        oidx = oldlist.index(ofnam)
-                        J['IntendedFor'][iidx] = os.path.join('func', os.path.split(newlist[oidx])[-1])
+                if 'IntendedFor' in J:
+                    for iidx, inam in enumerate(J['IntendedFor']):
+                        ifdir, ifnam = os.path.split(inam)
+                        ofnam = os.path.join(funcdir, ifnam)
+                        if ofnam in oldlist:
+                            oidx = oldlist.index(ofnam)
+                            J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
                 writejson(J, os.path.join(curdir, f))
 
