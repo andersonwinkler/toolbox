@@ -134,15 +134,17 @@ def cleanentity(curdir, f, entity='run'): # ==================================
 args = parseArguments(sys.argv)
 
 # Get a mapping between NIDB UID and AltUIDs
-altuid = next(os.walk(args.dirin))[1]
-altuid.sort()
-nidb = []
-for sid in altuid:
+slist = next(os.walk(args.dirin))[1]
+slist.sort()
+altuid = []
+nidb   = []
+for sid in slist:
     for curdir, subdirs, files in os.walk(os.path.join(args.dirin, sid)):
         for f in files:
             nid = f.split('_')[0]
             if nid not in nidb:
                 nidb.append(nid)
+                altuid.append(sid)
 nidb2altuid = pd.DataFrame.from_dict({
                         'NIDB_UID': nidb,
                         'AltUID'  : altuid})
