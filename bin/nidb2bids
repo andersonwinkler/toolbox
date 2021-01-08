@@ -1208,10 +1208,5 @@ if args.renumber and os.path.isdir(args.dirout):
                         for idxt, t in enumerate(dtok):
                             if t.startswith('ses-'):
                                 oldsesstr = t
-                        #newsesstr = newdirs[olddirs.index(oldsesstr)]
                         J['IntendedFor'][iidx] = J['IntendedFor'][iidx].replace(oldsesstr, newsesstr)
-#                        ofnam = os.path.join(funcdir, ifnam)
-#                        if ofnam in oldlist:
-#                            oidx = oldlist.index(ofnam)
-#                            J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
                 writejson(J, os.path.join(curdir, f))
