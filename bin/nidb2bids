@@ -15,6 +15,7 @@ import glob
 from shutil import copyfile
 from natsort import natsorted, ns
 import nibabel as nib
+import warnings
 
 
 def printHelp(argv, description): # ===========================================
@@ -155,8 +156,12 @@ if args.dirin != None:
     nidb2altuid = nidb2altuid.set_index('NIDB_UID')
     
     # Create output directory and populate it with hard links to the original files
-    if not os.path.isdir(args.dirout):
+    if os.path.isdir(args.dirout):
+        print('Error: Output directory already exists: {}'.format(args.dirout))
+        exit()
+    else:
         os.makedirs(args.dirout)
+    
     for curdir, subdirs, files in os.walk(args.dirin):
         for f in files:
             if isbidsfile(f)[0]:
@@ -961,7 +966,8 @@ if args.dirin != None:
                 
                 elif 'fmrifepi38mmisome' == series_description or \
                     'ap3restingepi38mmisome' == series_description or \
-                    'axialmerestepi3mmiso' in series_description: # ---------------
+                    'axialmerestepi3mmiso' in series_description or \
+                    'restingepi38mmisome' == series_description: # -----
                     # This is resting multi-echo
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -1054,7 +1060,7 @@ if args.dirin != None:
                     tok = D[nidb_id][studynum].loc[oldfnam,'newfnam'].split('_')
                     for t in tok:
                         if t.startswith('run-'):
-                            D[nidb_id][studynum].loc[oldfnam,'newfnam'] = D[nidb_id][studynum].loc[oldfnam,'newfnam'].replace(t, '{}.{}'.format(t, mi))
+                            D[nidb_id][studynum].loc[oldfnam,'newfnam'] = D[nidb_id][studynum].loc[oldfnam,'newfnam'].replace(t, '{}x{}'.format(t, mi))
                     mi = mi + 1
                 if mi == ma + 1:
                     mi = 1
@@ -1131,82 +1137,86 @@ if args.dirin != None:
                     
 # Renumber ses, run, echo, to 1, 2, 3, etc.
 # This part will only run if the "-r" option is given
-if args.renumber and os.path.isdir(args.dirout):
-    # Cleanup echo and run numbers
-    for entity in ['echo', 'run']:
+if args.renumber:
+    if os.path.isdir(args.dirout):
+        # Cleanup echo and run numbers
+        for entity in ['echo', 'run']:
+            oldlist = []
+            newlist = []
+            for curdir, subdirs, files in os.walk(args.dirout):
+                for f in sorted(files):
+                    oldfile, newfile = cleanentity(curdir, f, entity=entity)
+                    oldlist.append(oldfile)
+                    newlist.append(newfile)
+            for curdir, subdirs, files in os.walk(args.dirout):
+                for f in sorted(files):
+                    if curdir.endswith('fmap') and f.endswith('.json'):
+                        funcdir = os.path.join(os.path.split(curdir)[0], 'func')
+                        J = readjson(os.path.join(curdir, f))
+                        if 'IntendedFor' in J:
+                            for iidx, inam in enumerate(J['IntendedFor']):
+                                ifdir, ifnam = os.path.split(inam)
+                                ofnam = os.path.join(funcdir, ifnam)
+                                if ofnam in oldlist:
+                                    oidx = oldlist.index(ofnam)
+                                    J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
+                            writejson(J, os.path.join(curdir, f))
+            for i in range(0, len(oldlist)):
+                print('Renaming: {} -> {}'.format(oldlist[i],  newlist[i]))
+                os.rename(oldlist[i], newlist[i])
+    
+        # Cleanup session numbers
+        # Deal with the directories ses-* first
+        olddirs = []
+        newdirs = []
+        for curdir, subdirs, files in os.walk(args.dirout, topdown=False):
+            for d in sorted(subdirs):
+                olddir, newdir = cleanentity(curdir, d, entity='ses')
+                if newdir != olddir:
+                    olddirs.append(olddir)
+                    newdirs.append(newdir)
+        for i in range(0, len(olddirs)):
+            print('Renaming: {} -> {}'.format(olddirs[i], newdirs[i]))
+            os.rename(olddirs[i], newdirs[i])
+        # Then deal with the files
         oldlist = []
         newlist = []
         for curdir, subdirs, files in os.walk(args.dirout):
+            dtok = curdir.split('/')
+            for idxt, t in enumerate(dtok):
+                if t.startswith('ses-'):
+                    sesstr = t
             for f in sorted(files):
-                oldfile, newfile = cleanentity(curdir, f, entity=entity)
-                oldlist.append(oldfile)
-                newlist.append(newfile)
+                ftok = f.split('_')
+                for idxt, t in enumerate(ftok):
+                    if t.startswith('ses-'):
+                        ftok[idxt] = sesstr
+                oldfile = os.path.join(curdir, f)
+                newfile = os.path.join(curdir, '_'.join(ftok))
+                if newfile != oldfile:
+                    oldlist.append(oldfile)
+                    newlist.append(newfile)
+                    print('Renaming: {} -> {}'.format(oldfile, newfile))
+                    os.rename(oldfile, newfile)
+        # Now rename the 'IntendFor' inside the .json
         for curdir, subdirs, files in os.walk(args.dirout):
             for f in sorted(files):
                 if curdir.endswith('fmap') and f.endswith('.json'):
-                    funcdir = os.path.join(os.path.split(curdir)[0], 'func')
+                    dtok = curdir.split('/')
+                    for idxt, t in enumerate(dtok):
+                        if t.startswith('ses-'):
+                            newsesstr = t
+                    #funcdir = os.path.join(os.path.split(curdir)[0], 'func')
                     J = readjson(os.path.join(curdir, f))
                     if 'IntendedFor' in J:
                         for iidx, inam in enumerate(J['IntendedFor']):
                             ifdir, ifnam = os.path.split(inam)
-                            ofnam = os.path.join(funcdir, ifnam)
-                            if ofnam in oldlist:
-                                oidx = oldlist.index(ofnam)
-                                J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
-                        writejson(J, os.path.join(curdir, f))
-        for i in range(0, len(oldlist)):
-            print('Renaming: {} -> {}'.format(oldlist[i],  newlist[i]))
-            os.rename(oldlist[i], newlist[i])
-
-    # Cleanup session numbers
-    # Deal with the directories ses-* first
-    olddirs = []
-    newdirs = []
-    for curdir, subdirs, files in os.walk(args.dirout, topdown=False):
-        for d in sorted(subdirs):
-            olddir, newdir = cleanentity(curdir, d, entity='ses')
-            if newdir != olddir:
-                olddirs.append(olddir)
-                newdirs.append(newdir)
-    for i in range(0, len(olddirs)):
-        print('Renaming: {} -> {}'.format(olddirs[i], newdirs[i]))
-        os.rename(olddirs[i], newdirs[i])
-    # Then deal with the files
-    oldlist = []
-    newlist = []
-    for curdir, subdirs, files in os.walk(args.dirout):
-        dtok = curdir.split('/')
-        for idxt, t in enumerate(dtok):
-            if t.startswith('ses-'):
-                sesstr = t
-        for f in sorted(files):
-            ftok = f.split('_')
-            for idxt, t in enumerate(ftok):
-                if t.startswith('ses-'):
-                    ftok[idxt] = sesstr
-            oldfile = os.path.join(curdir, f)
-            newfile = os.path.join(curdir, '_'.join(ftok))
-            if newfile != oldfile:
-                oldlist.append(oldfile)
-                newlist.append(newfile)
-                print('Renaming: {} -> {}'.format(oldfile, newfile))
-                os.rename(oldfile, newfile)
-    # Now rename the 'IntendFor' inside the .json
-    for curdir, subdirs, files in os.walk(args.dirout):
-        for f in sorted(files):
-            if curdir.endswith('fmap') and f.endswith('.json'):
-                dtok = curdir.split('/')
-                for idxt, t in enumerate(dtok):
-                    if t.startswith('ses-'):
-                        newsesstr = t
-                #funcdir = os.path.join(os.path.split(curdir)[0], 'func')
-                J = readjson(os.path.join(curdir, f))
-                if 'IntendedFor' in J:
-                    for iidx, inam in enumerate(J['IntendedFor']):
-                        ifdir, ifnam = os.path.split(inam)
-                        dtok = ifdir.split('/')
-                        for idxt, t in enumerate(dtok):
-                            if t.startswith('ses-'):
-                                oldsesstr = t
-                        J['IntendedFor'][iidx] = J['IntendedFor'][iidx].replace(oldsesstr, newsesstr)
-                writejson(J, os.path.join(curdir, f))
+                            dtok = ifdir.split('/')
+                            for idxt, t in enumerate(dtok):
+                                if t.startswith('ses-'):
+                                    oldsesstr = t
+                            J['IntendedFor'][iidx] = J['IntendedFor'][iidx].replace(oldsesstr, newsesstr)
+                    writejson(J, os.path.join(curdir, f))
+    else:
+        print('Error: BIDS directory does not exist: {}'.format(args.dirout))
+        exit()
