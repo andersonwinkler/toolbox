@@ -33,7 +33,8 @@ def printHelp(argv, description): # ===========================================
     print("_____________________________________")
     print("Anderson M. Winkler")
     print("National Institutes of Health")
-    print("Sep/2020")
+    print("First version: Sep/2020")
+    print("This version:  Jan/2021")
     print("http://brainder.org")
     exit(1)
     
@@ -127,6 +128,14 @@ def cleanentity(curdir, f, entity='run'): # ==================================
     newfile = os.path.join(curdir, newfnam + fext)
     return oldfile, newfile
 
+def swapfields(json): # =======================================================
+    J = readjson(json)
+    if J['Modality'] == 'MR' and J['Manufacturer'] == 'GE':
+        tmp = J['SeriesDescription']
+        J['SeriesDescription'] = J['ProtocolName']
+        J['ProtocolName'] = tmp
+        writejson(J, json)
+    return
 
 # =============================================================================
 #   MAIN FUNCTION
@@ -183,6 +192,11 @@ if args.dirin != None:
             # Check if the current file could belong to BIDS and if it's a JSON
             isfbids, oldfnam, fext = isbidsfile(f)
             if isfbids and fext == '.json':
+                
+                # Take this opportunity to ensure it's a real copy (not a hard link),
+                # and swap ProtocolName and SeriesDescription (an issue with GE only).
+                link2copy(os.path.join(args.dirout, f))
+                swapfields(os.path.join(args.dirout, f))
                 
                 # This is the NIDB ID and a few other info, from the file names:
                 nidb_id, studynum, seriesnum, serialnum = oldfnam.split('_')
@@ -1134,7 +1148,7 @@ if args.dirin != None:
                             os.makedirs(newdir)
                         #print('Moving: {} -> {}'.format(oldfile, newfile))
                         os.rename(oldfile, newfile)
-                    
+
 # Renumber ses, run, echo, to 1, 2, 3, etc.
 # This part will only run if the "-r" option is given
 if args.renumber:
