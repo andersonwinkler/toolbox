@@ -57,9 +57,14 @@ fi
 
 if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
 
+   # Conform rawavg, but without changing the datatype
+   ${FREESURFER_HOME}/bin/mri_convert \
+       ${SUBJECTS_DIR}/${subj}/mri/rawavg.mgz \
+       ${SUBJECTS_DIR}/${subj}/mri/orig.nochange.mgz --conform --nochange
+
    # Compute the myelin surrogate
    ${FREESURFER_HOME}/bin/fscalc \
-       ${SUBJECTS_DIR}/${subj}/mri/orig.mgz div \
+       ${SUBJECTS_DIR}/${subj}/mri/orig.nochange.mgz div \
        ${SUBJECTS_DIR}/${subj}/mri/${TYPE}.prenorm.mgz \
        --o ${SUBJECTS_DIR}/${subj}/mri/myelin.mgz
 
