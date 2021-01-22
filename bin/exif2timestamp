@@ -1,0 +1,5 @@
+#!/bin/bash
+FILE=$1
+#NEWTIME=$(exiftool ${FILE}|grep "Date/Time Original"|awk '{print $4 ":" $5}'|rev|sed 's/:/./'|rev|sed 's/://g')
+NEWTIME=$(exiftool ${FILE}|grep "File Modification Date/Time"|awk '{print $5 ":" $6}'|awk -F- '{print $1}'|awk -F+ '{print $1}'|rev|sed 's/:/./'|rev|sed 's/://g')
+touch -a -m -t ${NEWTIME} ${FILE}
