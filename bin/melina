@@ -62,18 +62,18 @@ if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
    # Conform rawavg, but without changing the datatype
    ${FREESURFER_HOME}/bin/mri_convert \
       ${SUBJECTS_DIR}/${subj}/mri/rawavg.mgz \
-      ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.mgz --conform --nochange
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz --conform --nochange
 
    # Compute the myelin surrogate
    ${FREESURFER_HOME}/bin/fscalc \
-      ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.mgz div \
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz div \
       ${SUBJECTS_DIR}/${subj}/mri/${TYPE}.prenorm.mgz \
       --o ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz
 
-   # Convert orig.nochange to NIFTI so we can use FAST
+   # Convert orig_nochange to NIFTI so we can use FAST
    ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
-      -i ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.mgz \
-      -o ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.nii.gz
+      -i ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz \
+      -o ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz
 
 	# Convert aseg to NIFTI, dilate just a bit, so that we can use later for
 	# masking before doing FAST
@@ -84,47 +84,69 @@ if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
 	${FSLDIR}/bin/fslmaths \
 	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.nii.gz \
 	   -bin -kernel 3D -dilM \
-	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.mask.dilated.nii.gz
+	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz
    
-	# Mask the orig.nochange, so we can use FAST properly
+	# Mask the orig_nochange, so we can use FAST properly
 	${FSLDIR}/bin/fslmaths \
-	   ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.nii.gz -mul \
-	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.mask.dilated.nii.gz \
-	   ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked.nii.gz
+	   ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz -mul \
+	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz \
+	   ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked.nii.gz
 
    # Segment using FAST, and convert back to MGZ
    echo "Running FAST."
-   ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked.nii.gz
+   ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked.nii.gz
    for p in 1 2 ; do
       ${FREESURFER_HOME}/bin/mri_convert -it nii -ot mgz \
-      -i ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_${p}.nii.gz \
-      -o ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_${p}.mgz
+      -i ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
+      -o ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.mgz
    done
 
    # Sum GM and WM fractions
    ${FREESURFER_HOME}/bin/fscalc \
-      ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_1.mgz add \
-      ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_2.mgz \
-      --o ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_1+2.mgz
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_1.mgz add \
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_2.mgz \
+      --o ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_1+2.mgz
 
    # Apply the mask to the myelin surrogate
    ${FREESURFER_HOME}/bin/fscalc \
       ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz mul \
-      ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_1+2.mgz \
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_1+2.mgz \
       --o ${SUBJECTS_DIR}/${subj}/melina/myelin_pvc.mgz
 
+	# Now that PVC has been applied, let's also obtain the average value for GM, WM and CSF
+	# for this participant. We only want the "best" voxels, so let's erode a bit.
+	${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+      -i ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz \
+      -o ${SUBJECTS_DIR}/${subj}/melina/myelin.nii.gz
+   Mstr=""
+	for p in 0 1 2 ; do
+	   ${FSLDIR}/bin/fslmaths \
+	      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
+	      -bin -kernel boxv 3 -ero \
+	      -mul \
+	      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
+	      -mul \
+	      ${SUBJECTS_DIR}/${subj}/melina/myelin.nii.gz \
+	      ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_${p}_eroded.nii.gz
+	   M=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_${p}_eroded.nii.gz -M)
+	   Mstr="${Mstr}${M},"
+	done
+   echo "${Mstr}" | sed 's/\ //g' > ${SUBJECTS_DIR}/${subj}/melina/tissue_intensities.csv
+
    # Remove unused files
-   rm -f ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.mgz \
+   rm -f ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz \
          ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.mask.dilated.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_seg.nii.gz \
-	      ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_?.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pveseg.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_mixeltype.nii.gz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_?.mgz \
-         ${SUBJECTS_DIR}/${subj}/melina/orig.nochange.masked_pve_1+2.mgz
+         ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_seg.nii.gz \
+	      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_?.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pveseg.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_mixeltype.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_?.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_1+2.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/myelin.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_?_eroded.nii.gz
           
    # Project to the surface, using fraction of distance between white (0) and pial (1)
    if [[ ${PF_LIST} != "" ]] ; then
