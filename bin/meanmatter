@@ -1,0 +1,60 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Compute robust mean of GM, WM, and CSF.
+
+xx
+EOU
+exit 1
+fi
+
+# Check and accept the input arguments
+T1=""
+PROBE=""
+while getopts 't:p:' OPTION
+do
+  case ${OPTION} in
+    t) T1=${OPTARG} ;;
+    p) PROBE=${OPTARG} ;;
+  esac
+done
+if [[ -z "${T1}" ]] ; then
+   echo "Error: A T1 image must be supplied with the option -t."
+fi
+if [[ -z "${PROBE}" ]] ; then
+   PROBE=${T1}
+fi
+
+# If necessary, convert inputs to NIFTI
+fnam=${T1%.*}
+fext=${T1##*.}
+if [[ "${fext}" == "mgz" ]] || [[ "${fext}" == "mgh" ]] ; then
+	${FREESURFER_HOME}/bin/mri_convert -it ${fext} -ot nii -i ${T1} -o ${fnam}.nii.gz
+   T1toFAST=${fnam}
+fi
+T1toFAST=${fnam%.nii}
+
+fnam=${PROBE%.*}
+fext=${PROBE##*.}
+if [[ "${fext}" == "mgz" ]] || [[ "${fext}" == "mgh" ]] ; then
+	${FREESURFER_HOME}/bin/mri_convert -it ${fext} -ot nii -i ${PROBE} -o ${fnam}.nii.gz
+   PROBEtoCALC=${fnam}
+fi
+PROBEtoCALC=${fnam%.nii}
+
+
+echo "Running FAST."
+${FSLDIR}/bin/fast ${T1toFAST}
+for p in 0 1 2 ; do
+   ${FSLDIR}/bin/fslmaths ${T1toFAST}_pve_${p} -bin -kernel boxv 3 ${T1toFAST}_mask_${p}
+   ${FSLDIR}/bin/fslmaths ${T1toFAST}_pve_${p} -mul ${T1toFAST}_mask_${p} ${T1toFAST}_pvemasked_${p}
+done
+
+echo "Running fslcalc"
+M=""
+for p in 0 1 2 ; do
+   ${FSLDIR}/bin/fslcalc ${PROBEtoCALC} -mul ${T1toFAST}_pvemasked_${p} ${PROBEtoCALC}_masked_${p}
+   M="${M}$(${FSLDIR}/bin/fslstats ${PROBEtoCALC}_masked_${p} -M) "
+done
+echo ${M::-1}

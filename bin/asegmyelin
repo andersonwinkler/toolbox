@@ -13,19 +13,19 @@ Usage: asegpve -s <subjid> [-p <prefix>] [opts]
 -s <subjid>   : Subject (already processed with recon-all). More than
                 one can be supplied with multiple -s.
 -p <prefix>   : File prefix for the outputs. Files will be named
-                "{prefix}_{class}.csv", where {class} can be
-                0, 1 or 2, for gm, wm, or csf respectively.
+                "{prefix}_myelin_pvc.csv".
                 Default is simply "./output"
 -a            : Do for the aseg (subcortical).
+-c            : Do for the aparc (cortical).
 -g            : Do for the amygdala nuclei.
 -h            : Do for the hippocampal subfields.
 -t            : Do for the thalamic nuclei.
 
 _____________________________________
-Anderson M. Winkler
+Anderson M. Winkler & Andre Zugman
 National Institutes of Health (NIH/NIMH)
 Aug/2018 (first version)
-Sep/2019 (this version)
+Feb/2021 (this version)
 http://brainder.org
 EOU
 exit 1
@@ -35,8 +35,7 @@ fi
 SBJLIST=""
 PREFIX="output"
 PARC=""
-PVELIST="1 2" # CSF=0, GM=1, WM=2
-while getopts 's:p:aghtd:' OPTION
+while getopts 's:p:acghtd:' OPTION
 do
    case ${OPTION} in
       s) SBJLIST=$( [[ -f ${OPTARG} ]] && cat ${OPTARG} || echo "${SBJLIST} ${OPTARG}" ) ;;
@@ -80,22 +79,18 @@ for parc in ${PARC} ; do
                   <(echo ${LABLIST[${parc}]}|tr " " "\n") \
                   <(cat  ${FREESURFER_HOME}/FreeSurferColorLUT.txt))
    for labfile in ${LABFILE[${parc}]} ; do
-      for pve in ${PVELIST} ; do
-         echo "bids_name,${LABNAMES[${parc}]%?}" > ${PREFIX}_${parc}_${labfile%.mgz}_pve${pve}.csv
-      done
+       echo "bids_name,${LABNAMES[${parc}]%?}" > ${PREFIX}_${parc}_${labfile%.mgz}_myelin_pvc.csv
    done
 done
 
 # For each subject
 for subj in ${SBJLIST} ; do
    echo "Working on subject ${subj}"
-   if [[ -f ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz ]] ; then
+   if [[ -f ${SUBJECTS_DIR}/${subj}/melina/myelin_pvc.mgz ]] ; then
       echo "- Converting file format."
       ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
-                           ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz \
-                           ${SUBJECTS_DIR}/${subj}/tmp/brainmask.nii.gz
-      echo "- Segmenting with FAST."
-      ${FSLDIR}/bin/fast ${SUBJECTS_DIR}/${subj}/tmp/brainmask
+                           ${SUBJECTS_DIR}/${subj}/melina/myelin_pvc.mgz \
+                           ${SUBJECTS_DIR}/${subj}/tmp/myelin_pvc.nii.gz
       for parc in ${PARC} ; do
          for labfile in ${LABFILE[${parc}]} ; do
             if [[ -f ${SUBJECTS_DIR}/${subj}/mri/${labfile} ]] ; then
@@ -108,25 +103,23 @@ for subj in ${SBJLIST} ; do
                                         -thr ${lab} -uthr ${lab} -bin \
                                          ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}_${lab}
                done
-               for pve in ${PVELIST} ; do
-                  echo "- Working on tissue class ${pve} for ${parc} (${labfile})."
-                  M="${subj}"
-                  for lab in ${LABLIST[${parc}]} ; do
-                     m=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/tmp/brainmask_pve_${pve} \
-                                             -k ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}_${lab} -m)
-                     M="${M},${m//[[:blank:]]/}"
-                  done
-                  echo ${M} >> ${PREFIX}_${parc}_${labfile%.mgz}_pve${pve}.csv
+               echo "- Working on myelin for ${parc} (${labfile})."
+               M="${subj}"
+               for lab in ${LABLIST[${parc}]} ; do
+                  m=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/tmp/myelin_pvc \
+                                          -k ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}_${lab} -m)
+                  M="${M},${m//[[:blank:]]/}"
                done
+               echo ${M} >> ${PREFIX}_${parc}_${labfile%.mgz}_myelin_pvc.csv
                ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/${labfile%.mgz}*
             else
                echo "- File not found: ${SUBJECTS_DIR}/${subj}/mri/${LABFILE[${parc}]}. Skipping ${parc}."
             fi
          done
       done
-      ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/brainmask*
+      ${FSLDIR}/bin/imrm ${SUBJECTS_DIR}/${subj}/tmp/myelin_pvc*
    else
-      echo "- File not found: ${SUBJECTS_DIR}/${subj}/mri/brainmask.mgz. Skipping subject ${subj}"
+      echo "- File not found: ${SUBJECTS_DIR}/${subj}/melina/myelin_pvc.mgz. Skipping subject ${subj}"
    fi
 done
 echo "Done!"
