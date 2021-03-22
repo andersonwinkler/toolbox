@@ -981,6 +981,7 @@ if args.dirin != None:
                 elif 'fmrifepi38mmisome' == series_description or \
                     'ap3restingepi38mmisome' == series_description or \
                     'axialmerestepi3mmiso' in series_description or \
+                    'change2restingepi38mmisome' == series_description or \
                     'restingepi38mmisome' == series_description: # -----
                     # This is resting multi-echo
                     datatype   = 'func'
