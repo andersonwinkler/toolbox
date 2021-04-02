@@ -20,9 +20,9 @@ exit
 fi
 
 # Change below as needed.
-PALMPATH=/Users/winkler/tools/palm.git
+PALMPATH=/Users/winkler/OneDrive/tools/palm.git
 TEMPPATH=/tmp
-PUBLPATH=~winkler/Dropbox/AWS/andersonwinkler/palm
+PUBLPATH=~winkler/OneDrive/AWS/andersonwinkler/palm
 
 echo "Creating directory for the new package."
 ver=$(cat ${PALMPATH}/palm_version.txt | awk '{print $NF}' | awk -v "FS=)" '{print $1}')
