@@ -1,5 +1,6 @@
 function [scores,coeffs,evals,extras] = npca(varargin)
-% Return the first p eigenvectors and eigenvalues.
+% Return the first p eigenvectors and eigenvalues of the 
+% covariance matrix of X.
 %
 % Usage:
 % [scores,coeffs,evals,extras] = npca(X,p,Z)
@@ -88,7 +89,7 @@ s = diag(sign(Up(1,:)));
 % Eigenvectors and eigenvalues
 scores = Up*s;
 coeffs = Vp*s;
-if isscalar(Z),
+if isscalar(Z)
     df = nR - 1;
 else
     df = size(X,1);
@@ -96,14 +97,14 @@ end
 evals = diag(SSp)./df;
 
 % Some extra outputs, not normally needed
-if nargout == 4,
+if nargout == 4
     
     % Scaled eigenvectors
     extras.scores_scaled = X*Vp;
     extras.coeffs_scaled = Up'*X;
     
     % Unit norm eigenvectors
-    if nR >= nC,
+    if nR >= nC
         extras.scores_unit = scores/sqrt(SSp);
         extras.coeffs_unit = coeffs;
     else
