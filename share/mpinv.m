@@ -1,4 +1,4 @@
-function x = mpinv(P,y,sigsq)
+function x = mpinv(P,y,sigsq,tail)
 % Inverse cumulative density function of the Marcenko-Pastur
 % distribution of the eigenvalues of random matrices.
 % 
@@ -16,6 +16,8 @@ function x = mpinv(P,y,sigsq)
 % y     : Ratio #rows/#cols of the random matrix from which the
 %         eigenvalues are characteristic.
 % sigsq : Variance of the entries of X.
+% tail  : Boolean indicating whether x are upper-tail probabilities
+%         (p-values) or simply the CDF. Default is false.
 % 
 % Outputs:
 % x     : Eigenvalue of the matrix X for the corresponding P.
@@ -34,4 +36,4 @@ function x = mpinv(P,y,sigsq)
 
 a = sigsq.*(1 - y^.5).^2;
 b = sigsq.*(1 + y^.5).^2;
-x = fminbnd(@(x)abs(mpcdf(x,y,sigsq)-P),a,b);
+x = fminbnd(@(x)abs(mpcdf(x,y,sigsq,tail)-P),a,b);
