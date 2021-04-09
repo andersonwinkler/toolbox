@@ -34,6 +34,7 @@ function x = mpinv(P,y,sigsq,tail)
 % Mar/2021
 % http://brainder.org
 
+opts = optimset('TolX',1e-10);
 a = sigsq.*(1 - y^.5).^2;
 b = sigsq.*(1 + y^.5).^2;
-x = fminbnd(@(x)abs(mpcdf(x,y,sigsq,tail)-P),a,b);
+x = fminbnd(@(x)abs(mpcdf(x,y,sigsq,tail)-P),a,b,opts);

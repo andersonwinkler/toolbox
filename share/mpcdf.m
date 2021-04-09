@@ -34,12 +34,13 @@ function P = mpcdf(x,y,sigsq,tail)
 % Mar/2021
 % http://brainder.org
 
+tol = 1e-10; % tolerance for the integration
 a = sigsq.*(1 - y^.5).^2;
 b = sigsq.*(1 + y^.5).^2;
 if tail
-    P = quad(@(x)mppdf(x,y,sigsq,a,b),x,b);
+    P = quad(@(t)mppdf(t,y,sigsq,a,b),x,b,tol);
 else
-    P = quad(@(x)mppdf(x,y,sigsq,a,b),a,x); % 'quad' if faster than 'integral'
+    P = quad(@(t)mppdf(t,y,sigsq,a,b),a,x,tol); % 'quad' if faster than 'integral'
     P = P + (y > 1).*(1 - 1./y); % add point mass at 0 if y > 1
 end
 
