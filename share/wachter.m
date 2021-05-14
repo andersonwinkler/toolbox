@@ -87,7 +87,7 @@ y     = n/p;
 if y > 1, y = 1./y; end
 sigsq = var(X(:),0);
 
-% Covariance matrix its singular values
+% Covariance matrix and its singular values
 % Save some memory by working with the smallest
 % possible covariance matrix
 if n >= p
@@ -112,4 +112,4 @@ for k = 1:K
     %Pexp(k) = mpcdf(Exp(k).*y,y,sigsq,tail);    % p-values of expected (these are the same as the quantiles, uncomment if you want to confirm mpinv.m is correct)
     Pobs(k) = mpcdf(Obs(k).*y,y,sigsq,tail);    % p-values of observed
 end
-Pexp = q;
+Pexp = q; % if you uncomment line 112, then comment this one out.
