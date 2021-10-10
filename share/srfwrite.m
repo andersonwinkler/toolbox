@@ -1,4 +1,4 @@
-
+function srfwrite(varargin)
 % Write a surface file, in ASCII format.
 % 
 % srfwrite(vtx,fac,fname,comment);
