@@ -37,7 +37,7 @@ DOMYEL="N"
 DOGWCO="N"
 
 # Check and accept the arguments
-while getopts 's:l:m:p:cutyv' OPTION
+while getopts 's:l:m:p:cutygv' OPTION
 do
   case ${OPTION} in
     s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
