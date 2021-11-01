@@ -15,7 +15,8 @@ The options are:
 -c          : Run also for curv.
 -u          : Run also for sulc.
 -t          : Run also for thickness.
--y          : Run also for myelin maps (require ?h.myelin.mgz exist)
+-y          : Run also for myelin maps (requires ?h.myelin.mgz exist)
+-g          : Run also for gwc (requires ?h.gwc to exist)
 -v          : Run also for volumes (aseg + overlaid surfaces).
 
 _____________________________________
@@ -32,6 +33,8 @@ DOSURF="N"
 DOCURV="N"
 DOSULC="N"
 DOTHCK="N"
+DOMYEL="N"
+DOGWCO="N"
 
 # Check and accept the arguments
 while getopts 's:l:m:p:cutyv' OPTION
@@ -45,6 +48,7 @@ do
     u) DOSURF="Y" ; DOSULC="Y" ;;
     t) DOSURF="Y" ; DOTHCK="Y" ;;
     y) DOSURF="Y" ; DOMYEL="Y" ;;
+    g) DOSURF="Y" ; DOGWCO="Y" ;;
     v) DOASEG="Y" ;; 
   esac
 done
@@ -76,6 +80,11 @@ mkdir -p ${SUBJECTS_DIR}/${s}/shots
         export WHAT=myelin
         tksurfer ${s} ${h} ${m} -overlay ${SUBJECTS_DIR}/${s}/surf/${h}.myelin.mgz -fminmax 0.5 1.5 -tcl  $(dirname $0)/shots_tksurfer.tcl
       fi
+      if [[ ${DOGWCO} == "Y" ]] ; then
+        export WHAT=gwc
+        # you can replace ?h.gwc for ?h.w-g.pct.mgz if these were created by FS. The two have a .88 correlation
+        tksurfer ${s} ${h} ${m} -overlay ${SUBJECTS_DIR}/${s}/surf/${h}.gwc -fminmax 25 75 -tcl  $(dirname $0)/shots_tksurfer.tcl
+      fi
     done
   done
 done
@@ -87,4 +96,3 @@ for s in ${SUBJ_LIST} ; do
   tkmedit ${s} brainmask.mgz -tcl $(dirname $0)/shots_tkmedit.tcl
 done
 fi
-
