@@ -245,7 +245,7 @@ else # Compute the GWC
 	      --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz
 	   ${FREESURFER_HOME}/bin/mris_convert -c \
 	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.white \
+	      ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
 	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc
 
       # Remove unused files
