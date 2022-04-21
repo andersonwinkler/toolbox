@@ -83,7 +83,7 @@ mkdir -p ${SUBJECTS_DIR}/${s}/shots
       if [[ ${DOGWCO} == "Y" ]] ; then
         export WHAT=gwc
         # you can replace ?h.gwc for ?h.w-g.pct.mgz if these were created by FS. The two have a .88 correlation
-        tksurfer ${s} ${h} ${m} -overlay ${SUBJECTS_DIR}/${s}/surf/${h}.gwc -fminmax 25 75 -tcl  $(dirname $0)/shots_tksurfer.tcl
+        tksurfer ${s} ${h} ${m} -overlay ${SUBJECTS_DIR}/${s}/surf/${h}.gwc -fminmax 0 100 -tcl  $(dirname $0)/shots_tksurfer.tcl
       fi
     done
   done

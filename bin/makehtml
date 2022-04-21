@@ -18,6 +18,7 @@ The options are:
 -t             : Run also for thickness.
 -y             : Run also for myelin maps
 -v             : Run also for volumes (aseg + overlaid surfaces).
+-g             : Run also for the gwc
 
 * Important: This script requires ImageMagick (command 'convert'), and
   that the FreeSurfer variable SUBJECTS_DIR	has been set.
@@ -37,7 +38,8 @@ DOSURF="N"
 DOCURV="N"
 DOSULC="N"
 DOTHCK="N"
-while getopts 's:l:m:p:d:cutyv' OPTION
+DOGWC="N"
+while getopts 's:l:m:p:d:cutygv' OPTION
 do
    case ${OPTION} in
       s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
@@ -49,6 +51,7 @@ do
       u) DOSURF="Y" ; DOSULC="Y" ; PARC_LIST="${PARC_LIST} sulc" ;;
       t) DOSURF="Y" ; DOTHCK="Y" ; PARC_LIST="${PARC_LIST} thickness" ;;
       y) DOSURF="Y" ; DOMYEL="Y" ; PARC_LIST="${PARC_LIST} myelin" ;;
+      g) DOSURF="Y" ; DOGWC="Y"  ; PARC_LIST="${PARC_LIST} gwc" ;;
       v) DOASEG="Y" ;;
    esac
 done
