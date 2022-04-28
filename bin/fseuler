@@ -1,0 +1,92 @@
+#!/bin/bash
+
+if [ -z "${1}" ]; then
+cat <<EOU
+Print the first Euler number after surfaces
+are generated, for left and right hemispheres.
+
+Usage: 
+
+fsEuler <subject> <subjects_home> 
+
+The output is printed to stdout.
+
+_____________________________________
+Bianca A. V. Alberton
+Universidade Tecnologica Federal do Parana'
+Imaging and Electronic Instrumentation Laboratory (LABIEM)
+April/2019
+EOU
+exit 1
+fi
+
+subj=${1}
+if [[ ! -z "${2}" ]] ; then
+   SUBJECTS_DIR=${2}
+fi
+if [[ -z "${SUBJECTS_DIR}" ]] ; then
+   echo "Error: SUBJECTS_DIR variable not defined."
+   exit 1
+fi
+
+lhFile=${SUBJECTS_DIR}/${subj}/scripts/recon-all-lh.log
+if [[ -f ${lhFile} ]] ; then
+   lhEuler=$(awk '/After retessellation of defect 0/ {eulerN=$8; sub(/#=/,"",eulerN); print eulerN}' ${lhFile})
+   lhVtx0=$( awk '/before topology correction/       {nVtx=$5; sub(/\(nv=/,"",nVtx); sub(/,/,"",nVtx); print nVtx}' ${lhFile})
+   lhVtx1=$( awk '/after topology correction/        {for(i=1;i<=NF;i++) if($i=="correction,") nVtx=$(i+2); sub(/\(nv=/,"",nVtx); sub(/,/,"",nVtx); print nVtx}' ${lhFile})
+fi
+
+rhFile=${SUBJECTS_DIR}/${subj}/scripts/recon-all-rh.log
+if [[ -f ${rhFile} ]] ; then
+   rhEuler=$(awk '/After retessellation of defect 0/ {eulerN=$8; sub(/#=/,"",eulerN); print eulerN}' ${rhFile})
+   rhVtx0=$( awk '/before topology correction/       {nVtx=$5; sub(/\(nv=/,"",nVtx); sub(/,/,"",nVtx); print nVtx}' ${rhFile})
+   rhVtx1=$( awk '/after topology correction/        {for(i=1;i<=NF;i++) if($i=="correction,") nVtx=$(i+2); sub(/\(nv=/,"",nVtx); sub(/,/,"",nVtx); print nVtx}' ${rhFile})
+fi
+
+bhFile=${SUBJECTS_DIR}/${subj}/scripts/recon-all.log
+if [[ -f ${bhFile} ]] ; then
+   bhEuler=$(awk '/After retessellation of defect 0/ {eulerN=$8; sub(/#=/,"",eulerN); print eulerN}' ${bhFile})
+   bhVtx0=$( awk '/before topology correction/       {nVtx=$5; sub(/\(nv=/,"",nVtx); sub(/,/,"",nVtx); print nVtx}' ${bhFile})
+   bhVtx1=$( awk '/after topology correction/        {for(i=1;i<=NF;i++) if($i=="correction,") nVtx=$(i+2); sub(/\(nv=/,"",nVtx); sub(/,/,"",nVtx); print nVtx}' ${bhFile})
+   bhEuler=$(echo ${bhEuler} | tr "\n" " ")
+   bhVtx0=$( echo ${bhVtx0}  | tr "\n" " ")
+   bhVtx1=$( echo ${bhVtx1}  | tr "\n" " ")
+fi
+
+nE=$(echo "${lhEuler} ${rhEuler} ${bhEuler}" | wc -w)
+if [[ ${nE} -eq 1 ]] ; then
+   bhEuler="${lhEuler} ${rhEuler} ${bhEuler} ${lhEuler} ${rhEuler} ${bhEuler}"
+   lhEuler=""
+   rhEuler=""
+elif [[ ${nE} -eq 0 ]] ; then
+   bhEuler="NaN NaN"
+   lhEuler=""
+   rhEuler=""
+fi
+
+nV=$(echo "${lhVtx0} ${rhVtx0} ${bhVtx0}" | wc -w)
+if [[ ${nV} -eq 1 ]] ; then
+   bhVtx0="${lhVtx0} ${rhVtx0} ${bhVtx0} ${lhVtx0} ${rhVtx0} ${bhVtx0}"
+   lhVtx0=""
+   rhVtx0=""
+elif [[ ${nV} -eq 0 ]] ; then
+   bhVtx0="NaN NaN"
+   lhVtx0=""
+   rhVtx0=""
+fi
+
+nV=$(echo "${lhVtx1} ${rhVtx1} ${bhVtx1}" | wc -w)
+if [[ ${nV} -eq 1 ]] ; then
+   bhVtx1="${lhVtx1} ${rhVtx1} ${bhVtx1} ${lhVtx1} ${rhVtx1} ${bhVtx1}"
+   lhVtx1=""
+   rhVtx1=""
+elif [[ ${nV} -eq 0 ]] ; then
+   bhVtx1="NaN NaN"
+   lhVtx1=""
+   rhVtx1=""
+fi
+
+# This is to remove extra spaces (if bhEuler exists, lhEuler and rhEuler will be empty, and vice versa, hence the extra spaces)
+echo "${lhEuler} ${rhEuler} ${bhEuler} ${lhVtx0} ${rhVtx0} ${bhVtx0} ${lhVtx1} ${rhVtx1} ${bhVtx1}" | awk 'BEGIN {OFS=","} {print $1, $2, $3, $4, $5, $6}'
+exit 0
+

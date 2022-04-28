@@ -20,12 +20,13 @@ Usage: asegpve -s <subjid> [-p <prefix>] [opts]
 -g            : Do for the amygdala nuclei.
 -h            : Do for the hippocampal subfields.
 -t            : Do for the thalamic nuclei.
+-l            : Do for the subcortical limbic structures.
 
 _____________________________________
 Anderson M. Winkler
 National Institutes of Health (NIH/NIMH)
 Aug/2018 (first version)
-Sep/2019 (this version)
+Apr/2022 (this version)
 http://brainder.org
 EOU
 exit 1
@@ -36,7 +37,7 @@ SBJLIST=""
 PREFIX="output"
 PARC=""
 PVELIST="1 2" # CSF=0, GM=1, WM=2
-while getopts 's:p:aghtd:' OPTION
+while getopts 's:p:aghtld:' OPTION
 do
    case ${OPTION} in
       s) SBJLIST=$( [[ -f ${OPTARG} ]] && cat ${OPTARG} || echo "${SBJLIST} ${OPTARG}" ) ;;
@@ -46,6 +47,7 @@ do
       g) PARC="${PARC} amyg" ;;
       h) PARC="${PARC} hipp" ;;
       t) PARC="${PARC} thal" ;;
+      l) PARC="${PARC} limb" ;;
       d) SUBJECTS_DIR=${OPTARG} ;;
    esac
 done
@@ -66,6 +68,7 @@ LABLIST[hipp]="203 211 212 215 226 233 234 235 236 237 238 239 240 241 242 243 2
 LABLIST[amyg]="7001 7003 7005 7006 7007 7008 7009 7010 7015"
 LABLIST[thal]="8103 8104 8105 8106 8108 8109 8110 8111 8112 8113 8115 8116 8117 8118 8120 8121 8122 8123 8126 8127 8128 8129 8133 \
                8203 8204 8205 8206 8208 8209 8210 8211 8212 8213 8215 8216 8217 8218 8220 8221 8222 8223 8226 8227 8228 8229 8233"
+LABLIST[limb]="26 58 819 820 821 822 843 844 853 865 866 869 870"
 
 # File names with the segmentations
 LABFILE[aseg]=aseg.mgz
@@ -73,6 +76,7 @@ LABFILE[aparc]=aparc+aseg.mgz
 LABFILE[amyg]="lh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz rh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz"
 LABFILE[hipp]="lh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz rh.hippoAmygLabels-T1.v21.FSvoxelSpace.mgz"
 LABFILE[thal]=ThalamicNuclei.v10.T1.FSvoxelSpace.mgz
+LABFILE[limb]=sclimbic.mgz
 
 # Create headers for the output files
 for parc in ${PARC} ; do
