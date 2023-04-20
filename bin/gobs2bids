@@ -50,6 +50,8 @@ def parseArguments(argv): # ===================================================
                             type=str, dest='dirin', action='store', required=False)
         parser.add_argument('-b', '--bids',      help="Output BIDS directory.",
                             type=str, dest='dirout', action='store', required=True)
+        parser.add_argument('-s', '--ses2sub',  help="Use study name as subject name.",
+                            dest='ses2sub', action='store_true', required=False)
         parser.add_argument('-r', '--renumber',  help="Re-number sessions, runs and echos to 1, 2, etc...",
                             dest='renumber', action='store_true', required=False)
         args = parser.parse_args(argv[1:])
@@ -142,7 +144,6 @@ def swapfields(json): # =======================================================
 
 # Parse arguments
 args = parseArguments(sys.argv)
-#args = parseArguments('gobs2bids -n ABC000 -b ABC000.bids -r'.split(' '))
 
 # Note that dirin (-n nidbdir) is optional. If not supplied, and if the BIDS
 # directory exists and -r was supplied, it will renumber entities in the bidsdir.
@@ -159,25 +160,25 @@ if args.dirin != None:
                 if nid not in nidb:
                     nidb.append(nid)
                     altuid.append(sid)
-    nidb2altuid = pd.DataFrame.from_dict({
-                            'NIDB_UID': nidb,
-                            'AltUID'  : altuid})
-    nidb2altuid = nidb2altuid.set_index('NIDB_UID')
     
-    # Create output directory and populate it with hard links to the original files
+    # Create output directory if it does not exist
     if os.path.isdir(args.dirout):
         print('Error: Output directory already exists: {}'.format(args.dirout))
-        exit()
+        sys.exit()
     else:
         os.makedirs(args.dirout)
     
+    # Populate output directory with hard links to the original files
+    S = pd.DataFrame(columns=['olddir'])
     for curdir, subdirs, files in os.walk(args.dirin):
         for f in files:
-            if isbidsfile(f)[0]:
+            isfbids, oldfnam, fext = isbidsfile(f)
+            if isfbids:
                 print('{} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
                 if not os.path.isfile(os.path.join(args.dirout, f)):
                     print('Creating link: {} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
                     os.link(os.path.join(curdir, f), os.path.join(args.dirout, f))
+                    S.loc[oldfnam,'olddir'] = curdir
                 else:
                     print('Target already exists: {} -> {}'.format(os.path.join(curdir, f), os.path.join(args.dirout, f)))
                 #os.chmod(os.path.join(args.dirout, f), 0o660)
@@ -200,19 +201,25 @@ if args.dirin != None:
                 
                 # This is the NIDB ID and a few other info, from the file names:
                 nidb_id, studynum, seriesnum, serialnum = oldfnam.split('_')
+                studynam = ''
+                oldfnamp = S.loc[oldfnam,'olddir'].split('/')
+                if nidb_id in oldfnamp:
+                    studynam = oldfnamp[oldfnamp.index(nidb_id)+1]
                 
                 # Create dictionary entries to store all stuff
                 if nidb_id not in D:
                     D[nidb_id] = {}
                 if studynum not in D[nidb_id]:
                     D[nidb_id][studynum] = pd.DataFrame(columns=[
-                            'seriesnum','serialnum','series_description',
+                            'nidb_id','studynam','seriesnum','serialnum','series_description',
                             'acquisition_date','acquisition_time','echo_time','newfnam','datatype'])
         
                 # Start populating the fields
+                D[nidb_id][studynum].loc[oldfnam,'nidb_id']   = nidb_id # redundant but gives extra flexibility later
+                D[nidb_id][studynum].loc[oldfnam,'studynam']  = studynam
                 D[nidb_id][studynum].loc[oldfnam,'seriesnum'] = seriesnum
                 D[nidb_id][studynum].loc[oldfnam,'serialnum'] = serialnum
-                
+                                
                 # Read the JSON and collect as much information as needed. These pieces
                 # will be used for renaming later:
                 J = readjson(os.path.join(args.dirout, f))
@@ -247,7 +254,11 @@ if args.dirin != None:
                 D[nidb_id][studynum].loc[oldfnam,'pixdimk'] = round(pixdim[2]*100)/100
                 
                 # Now prepare to rename according to the type of file
-                substr   = 'sub-{}'.format(nidb2altuid.loc[nidb_id, 'AltUID']) # subject ID (AltUID)
+                if args.ses2sub:
+                    sub_id = D[nidb_id][studynum].loc[oldfnam,'studynam']
+                else:
+                    sub_id = D[nidb_id][studynum].loc[oldfnam,'nidb_id']
+                substr   = 'sub-{}'.format(sub_id) # subject ID (AltUID)
                 sesstr   = '' # string to store the session number
                 taskstr  = '' # string sto store the task name
                 runstr   = '' # string to store the run number
@@ -521,11 +532,15 @@ if args.dirin != None:
     for nidb_id in D:
         for studynum in D[nidb_id]:
             for oldfnam in D[nidb_id][studynum].index:
+                if args.ses2sub:
+                    sub_id = D[nidb_id][studynum].loc[oldfnam,'studynam']
+                else:
+                    sub_id = D[nidb_id][studynum].loc[oldfnam,'nidb_id']
                 for iext in ['.json', '.nii.gz', '.bvec', '.bval', '.tsv']:
                     oldfile = os.path.join(args.dirout, '{}{}'.format(oldfnam, iext))
                     if os.path.isfile(oldfile):
                         newfile = os.path.join(args.dirout, 
-                                                'sub-{}'.format(nidb2altuid.loc[nidb_id, 'AltUID']),
+                                                'sub-{}'.format(sub_id),
                                                 'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']),
                                                 D[nidb_id][studynum].loc[oldfnam,'datatype'],
                                                 '{}{}'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'], iext))
