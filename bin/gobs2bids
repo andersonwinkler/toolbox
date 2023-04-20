@@ -93,7 +93,7 @@ def isbidsfile(filename): # ===================================================
     return isit, fnam, fext
 
 def simplifystring(S):  # =====================================================
-    special_chars = [' ', '-', '_', '.', '+', '(', ')', '/']
+    special_chars = [' ', '-', '_', '.', '+', '(', ')', '/', '=']
     for c in special_chars:
         S = S.replace(c, '')
     S = S.lower()
@@ -142,7 +142,7 @@ def swapfields(json): # =======================================================
 
 # Parse arguments
 args = parseArguments(sys.argv)
-#args = parseArguments('~/tools/toolbox.git/bin/gobs2bids -n ~/_tray/MRI084.problem -b ~/_tray/MRI084.bids -r'.split(' '))
+#args = parseArguments('gobs2bids -n ABC000 -b ABC000.bids -r'.split(' '))
 
 # Note that dirin (-n nidbdir) is optional. If not supplied, and if the BIDS
 # directory exists and -r was supplied, it will renumber entities in the bidsdir.
@@ -167,7 +167,7 @@ if args.dirin != None:
     # Create output directory and populate it with hard links to the original files
     if os.path.isdir(args.dirout):
         print('Error: Output directory already exists: {}'.format(args.dirout))
-        exit
+        exit()
     else:
         os.makedirs(args.dirout)
     
@@ -261,8 +261,9 @@ if args.dirin != None:
                     sesstr = '_ses-{}'.format(acquisition_date)
                 if acquisition_time != '':
                     runstr = '_run-{}'.format(acquisition_time)
-                has_fmap   = 'no'
-                multi_echo = False
+                B0_identifier = ''
+                B0_source     = ''
+                multi_echo    = False
     
                 # ===== ANATOMY ===================================================
                 print('Simplified SeriesDescription: {}'.format(series_description))
@@ -284,28 +285,58 @@ if args.dirin != None:
                         acqstr = '_acq-TI801'
                     elif series_description.endswith('ti808'):
                         acqstr = '_acq-TI808'
-                    has_fmap   = 'no'
-                    multi_echo = False
-                
+                    
+                elif 't1mpr08isohcptr2400' in series_description:
+                    # This is a T1w
+                    datatype = 'anat'
+                    modstr   = '_T1w'
+                    
                 elif 'flair' in series_description: # -----------------------------
                     # This is a FLAIR
                     datatype = 'anat'
                     modstr = '_FLAIR'
-                    has_fmap = 'no'
-                    multi_echo = False
                     
                 # ===== FIELDMAPS =================================================
                     
                 elif 'fieldmapping' in series_description: # --------------
                     # These are distortion correction scans
-                    datatype = 'fmap'                    
+                    datatype = 'fmap'
                     if   'M' in J['ImageType']:
                         modstr     = '_magnitude'
                         multi_echo = True
                     elif 'P' in J['ImageType']:
                         modstr     = '_phasediff'
-                    has_fmap       = 'no'
-   
+                    B0_identifier = 'fieldmapping'
+                    
+                elif 'topup' in series_description: # --------------
+                    datatype  = 'fmap'
+                    modstr    = '_epi'
+                    J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                    PEdir = J['PhaseEncodingDirection']
+                    if   PEdir.endswith('-'):
+                        PEdir = PEdir.replace('-','neg')
+                    elif PEdir.endswith('+'):
+                        PEdir = PEdir.replace('+','pos')
+                    else:
+                        PEdir = PEdir + 'pos'
+                    dirstr = '_dir-{}'.format(PEdir)
+                    B0_identifier = 'fmri_topup'
+                    
+                elif 'diffmb32mmb00'   in series_description or \
+                     'diffmb32mmb0180' in series_description: # --------------
+                    datatype  = 'fmap'
+                    modstr    = '_epi'
+                    J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                    PEdir = J['PhaseEncodingDirection']
+                    if   PEdir.endswith('-'):
+                        PEdir = PEdir.replace('-','neg')
+                    elif PEdir.endswith('+'):
+                        PEdir = PEdir.replace('+','pos')
+                    else:
+                        PEdir = PEdir + 'pos'
+                    dirstr = '_dir-{}'.format(PEdir)
+                    B0_identifier = 'dwi_topup'
+
                 # ===== RESTING STATE =============================================
                 
                 elif 'boldepi128' in series_description: # ---------
@@ -313,33 +344,50 @@ if args.dirin != None:
                     datatype   = 'func'
                     modstr     = '_bold'
                     taskstr    = '_task-rest'
-                    has_fmap   = 'before'
                     multi_echo = False
+                    B0_source  = 'fieldmapping'
                 
                 elif 'ep2dboldlong' in series_description: # ---------
                     # This is resting state FMRI 
                     datatype   = 'func'
                     modstr     = '_bold'
                     taskstr    = '_task-rest-long'
-                    has_fmap   = 'before'
                     multi_echo = False
+                    B0_source  = 'fieldmapping'
                     
                 elif 'ep2dbold' in series_description: # ---------
                     # This is resting state FMRI 
                     datatype   = 'func'
                     modstr     = '_bold'
                     taskstr    = '_task-rest'
-                    has_fmap   = 'before'
                     multi_echo = False
+                    B0_source  = 'fieldmapping'
                 
-                elif 'mocoseries' in series_description: # ---------
-                    # This is resting state FMRI 
+                elif 'mocoseries' == series_description: # ---------
+                    # This is resting state FMRI, motion corrected 
                     datatype   = 'func'
                     modstr     = '_bold'
                     taskstr    = '_task-rest'
                     recstr     = '_rec-moco'
-                    has_fmap   = 'before'
                     multi_echo = False
+                    B0_source  = 'fieldmapping'
+                
+                elif 'boldcheck' in series_description: # ---------
+                    # This is resting state FMRI (IGAB) SBREF?
+                    datatype   = 'func'
+                    modstr     = '_bold'
+                    taskstr    = '_task-rest'
+                    multi_echo = False
+                    acqstr     = '_acq-check'
+                    B0_source  = 'fieldmapping'
+                    
+                elif 'boldmb324mm' in series_description: # ---------
+                    # This is resting state FMRI (IGAB)
+                    datatype   = 'func'
+                    modstr     = '_bold'
+                    taskstr    = '_task-rest'
+                    multi_echo = False
+                    B0_source  = 'fieldmapping'
                     
                 # ===== DIFFUSION =================================================
                 
@@ -349,28 +397,37 @@ if args.dirin != None:
                     datatype   = 'dwi'
                     modstr     = '_dwi'
                     taskstr    = ''
-                    has_fmap   = 'no'
                     multi_echo = False
+                    B0_source  = None
+                    
+                elif 'diffmb32mmb700064' == series_description or \
+                     'diffmb12mmb700064' == series_description: # -----------------------------
+                    # This is diffusion
+                    datatype   = 'dwi'
+                    modstr     = '_dwi'
+                    taskstr    = ''
+                    multi_echo = False
+                    B0_source  = 'dwi_topup'
                 
                 else: # -----------------------------------------------------------
                     print('Skipping: {}{} ({})'.format(oldfnam, fext, series_description))
                     datatype   = 'unknown'
                     modstr     = '_unknown'
                     taskstr    = ''
-                    has_fmap   = 'no'
                     multi_echo = False
                 
                 # For multi-echo data, get the echo time
                 if datatype == 'func' and multi_echo and echo_time != '':
                     echstr = '_echo-{}'.format(echo_time)
                 
-                newfnam = '{}{}{}{}{}{}{}{}'.format(substr, sesstr, taskstr, recstr, dirstr, runstr, echstr, modstr)
-                D[nidb_id][studynum].loc[oldfnam,'datatype'] = datatype
-                D[nidb_id][studynum].loc[oldfnam,'has_fmap'] = has_fmap
-                D[nidb_id][studynum].loc[oldfnam,'newfnam']  = newfnam
+                newfnam = '{}{}{}{}{}{}{}{}{}'.format(substr, sesstr, acqstr, taskstr, recstr, dirstr, runstr, echstr, modstr)
+                D[nidb_id][studynum].loc[oldfnam,'datatype']      = datatype
+                D[nidb_id][studynum].loc[oldfnam,'B0_identifier'] = B0_identifier
+                D[nidb_id][studynum].loc[oldfnam,'B0_source']     = B0_source
+                D[nidb_id][studynum].loc[oldfnam,'newfnam']       = newfnam
                 print('Provisional filenames: {} -> {}'.format(oldfnam, newfnam))
     
-    # Deal with phase/magnitude field maps
+    # Deal with phase/magnitude field maps duplicate files
     for nidb_id in D:
         for studynum in D[nidb_id]:
             indices = D[nidb_id][studynum].index.tolist()
@@ -386,7 +443,7 @@ if args.dirin != None:
                     mi = mi + 1
                     if mi == ma + 1:
                         mi = 1
-    
+        
     # Deal with the rare cases of identical new filenames
     for nidb_id in D:
         for studynum in D[nidb_id]:
@@ -424,59 +481,41 @@ if args.dirin != None:
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
                     EchoTimes = {}
                     
-    # Sort out the fieldmaps (add the IntendedFor field to the JSON)
+    # Sort out the fieldmaps (add B0Field* and IntendedFor fieldsto the JSON)
     for nidb_id in D:
         for studynum in D[nidb_id]:
-    
-            # Do first for the fieldmaps after the functionals
-            intendedfor = []
-            juststored  = True
-            indices = D[nidb_id][studynum].index.tolist()
-            for oldfnam in indices:
-                if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] != 'no':
-                    if juststored:
-                        intendedfor = []
-                        juststored  = False
-                if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] == 'after':
-                    intendedfor.append(os.path.join('ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']), 
-                                                    D[nidb_id][studynum].loc[oldfnam,'datatype'], 
-                                                    '{}.nii.gz'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'])))
-                if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'fmap' and len(intendedfor) > 0:
-                    link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
+            for oldfnam in D[nidb_id][studynum].index.tolist():
+                
+                # Field maps proper (B0FieldIdentifier)
+                if D[nidb_id][studynum].loc[oldfnam,'B0_identifier'] != '':
+                    print('Adding B0FieldIdentifier and IntendedFor to: {}'.format('{}.json'.format(oldfnam)))
+                    idx = D[nidb_id][studynum].loc[:,'B0_source'] == D[nidb_id][studynum].loc[oldfnam,'B0_identifier']
+                    intendedfor = []
+                    for newfnam in D[nidb_id][studynum].loc[idx,'newfnam']:
+                        bids_path = os.path.join(newfnam.split('_')[0],
+                                                 'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']), 
+                                                 D[nidb_id][studynum].loc[oldfnam,'datatype'], 
+                                                 '{}.nii.gz'.format(newfnam))
+                        intendedfor.append('bids::{}'.format(bids_path))
                     intendedfor.sort()
+                    link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     if 'IntendedFor' in J:
-                        J['IntendedFor'] = J['IntendedFor'] + intendedfor
+                        J['IntendedFor']   = J['IntendedFor'] + intendedfor
                     else:
-                        J['IntendedFor'] = intendedfor
-                    print('Adding IntendedFor to: {}'.format('{}.json'.format(oldfnam)))
+                        J['IntendedFor']   = intendedfor
+                    J['IntendedFor']       = list(set(J['IntendedFor']))
+                    J['B0FieldIdentifier'] = D[nidb_id][studynum].loc[oldfnam,'B0_identifier']
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
-                    juststored = True
                     
-            # Repeat for the fieldmaps before the functionals
-            intendedfor = []
-            juststored  = True
-            indices.reverse()
-            for oldfnam in indices:
-                if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] != 'no':
-                    if juststored:
-                        intendedfor = []
-                        juststored  = False
-                if D[nidb_id][studynum].loc[oldfnam,'has_fmap'] == 'before':
-                    intendedfor.append(os.path.join('ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']), 
-                                                    D[nidb_id][studynum].loc[oldfnam,'datatype'], 
-                                                    '{}.nii.gz'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'])))
-                if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'fmap' and len(intendedfor) > 0:
-                    intendedfor.sort()
+                # Images that use the field maps as source
+                if D[nidb_id][studynum].loc[oldfnam,'B0_source'] != '':
+                    print('Adding B0FieldSource to: {}'.format('{}.json'.format(oldfnam)))
                     link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
-                    if 'IntendedFor' in J:
-                        J['IntendedFor'] = J['IntendedFor'] + intendedfor
-                    else:
-                        J['IntendedFor'] = intendedfor
-                    print('Adding IntendedFor to: {}'.format('{}.json'.format(oldfnam)))
+                    J['B0FieldSource'] = D[nidb_id][studynum].loc[oldfnam,'B0_source']
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
-                    juststored = True
+
                     
     # Rename the files, from the NIDB names to BIDS names.
     for nidb_id in D:
@@ -486,14 +525,14 @@ if args.dirin != None:
                     oldfile = os.path.join(args.dirout, '{}{}'.format(oldfnam, iext))
                     if os.path.isfile(oldfile):
                         newfile = os.path.join(args.dirout, 
-                                               'sub-{}'.format(nidb2altuid.loc[nidb_id, 'AltUID']),
-                                               'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']),
-                                               D[nidb_id][studynum].loc[oldfnam,'datatype'],
-                                               '{}{}'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'], iext))
+                                                'sub-{}'.format(nidb2altuid.loc[nidb_id, 'AltUID']),
+                                                'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']),
+                                                D[nidb_id][studynum].loc[oldfnam,'datatype'],
+                                                '{}{}'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'], iext))
                         newdir, newname = os.path.split(newfile)
                         if not os.path.isdir(newdir):
                             os.makedirs(newdir)
-                        print('Moving: {} -> {}'.format(oldfile, newfile))
+                        print('Renaming: {} -> {}'.format(oldfile, newfile))
                         os.rename(oldfile, newfile)
 
 # Renumber ses, run, echo, to 1, 2, 3, etc.
