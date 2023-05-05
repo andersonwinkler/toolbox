@@ -2,10 +2,10 @@
 
 if [ -z "$1" ]; then
 cat <<EOU
-Create an HTML page to quickly inspect the surfaces of many
+Create thumbnails for an HTML page to quickly inspect the surfaces of many
 subjects, using the "shots" produced by the 'takeshots' command.
 
-Usage: makehtml [options]
+Usage: makethumbs [options]
 
 The options are:
 -s <subjid>    : Specify one subject ID.
