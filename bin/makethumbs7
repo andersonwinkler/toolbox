@@ -1,0 +1,109 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Create an HTML page to quickly inspect the surfaces of many
+subjects, using the "shots" produced by the 'takeshots' command.
+
+Usage: makehtml [options]
+
+The options are:
+-s <subjid>    : Specify one subject ID.
+-l <listid>    : Specify a file list with the subject IDs, one per line.
+-m <mesh>      : Specify a surface file (pial, white, inflated, sphere, etc).
+-p <parc>      : Specify a parcellation to load (aparc, a2009s, a2005s).
+-d <directory> : Specify the directory to save the resulting HTML page.
+-c             : Run also for curv.
+-u             : Run also for sulc.
+-t             : Run also for thickness.
+-y             : Run also for myelin maps
+-g             : Run also for white-gray contrast
+-v             : Run also for volumes (aseg + overlaid surfaces).
+
+* Important: This script requires ImageMagick (command 'convert'), and
+  that the FreeSurfer variable SUBJECTS_DIR has been set.
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Jan/2010
+http://brainder.org
+Modified by Andre Zugman (NIMH/NIH)
+EOU
+exit 1
+fi
+
+# Check and accept the arguments
+DOASEG="N"
+DOSURF="N"
+DOCURV="N"
+DOSULC="N"
+DOTHCK="N"
+DOMYEL="N"
+DOWGPC="N"
+while getopts 's:l:m:p:d:cutygv' OPTION ; do
+   case ${OPTION} in
+      s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
+      l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
+      m) MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
+      p) PARC_LIST="${PARC_LIST} ${OPTARG}" ; DOSURF="Y" ;;
+      d) HTML_DIR="${OPTARG}" ;;
+      c) DOSURF="Y" ; DOCURV="Y" ; PARC_LIST="${PARC_LIST} curv" ;;
+      u) DOSURF="Y" ; DOSULC="Y" ; PARC_LIST="${PARC_LIST} sulc" ;;
+      t) DOSURF="Y" ; DOTHCK="Y" ; PARC_LIST="${PARC_LIST} thickness" ;;
+      y) DOSURF="Y" ; DOMYEL="Y" ; PARC_LIST="${PARC_LIST} myelin" ;;
+      g) DOSURF="Y" ; DOWGPC="Y" ; PARC_LIST="${PARC_LIST} w-g.pct.mgh" ;;
+      v) DOASEG="Y" ;;
+   esac
+done
+if [ "x${HTML_DIR}" == "x" ] ; then
+   echo "Output directory not specified"
+   exit 1 ;
+fi
+
+
+# Cropping, format conversion and thumbnail generation
+if [[ ${DOSURF} == "Y" ]] ; then
+for m in ${MESH_LIST} ; do
+   echo "Preparing ${m} images"
+   mkdir -p ${HTML_DIR}/${m}/images ${HTML_DIR}/${m}/thumbnails
+   [ "${m}" == "pial" ] || [ "${m}" == "white" ] && sizimg="1600x1600"   && sizthm="220x220"
+   [ "${m}" == "inflated" ]                      && sizimg="1600x1600"   && sizthm="220x220"
+   [ "${m}" == "sphere" ]                        && sizimg="1600x1600"   && sizthm="220x220"
+   for s in ${SUBJ_LIST} ; do
+      echo ${s}
+      for p in ${PARC_LIST} ; do
+         for img in ${SUBJECTS_DIR}/${s}/shots/${s}_*h_${m}_${p}_*.png ; do
+            bimg=$(basename ${img})           
+            convert ${img} -background black -trim -gravity center -extent ${sizimg} -format png ${HTML_DIR}/${m}/images/${bimg}
+            convert ${HTML_DIR}/${m}/images/${bimg} -thumbnail ${sizthm} ${HTML_DIR}/${m}/thumbnails/${bimg}
+         done
+      done
+      if [[ ${DOCURV} == "Y" ]] || [[ ${DOSULC} == "Y" ]] || [[ ${DOTHCK} == "Y" ]] || [[ ${DOMYEL} == "Y" ]]; then
+         for img in ${SUBJECTS_DIR}/${s}/shots/${s}_*h_${m}_*_*.png ; do
+            bimg=$(basename ${img})
+            convert ${img} -background black -trim -gravity center -extent ${sizimg} -format png ${HTML_DIR}/${m}/images/${bimg}
+            convert ${HTML_DIR}/${m}/images/${bimg} -thumbnail ${sizthm} ${HTML_DIR}/${m}/thumbnails/${bimg}
+         done
+      fi
+   done
+done
+fi
+
+if [[ ${DOASEG} == "Y" ]] ; then
+   sizimg="1200x1200" 
+   sizthm="200x200"
+   for m in aseg surfaces ; do
+   echo "Preparing ${m} images"
+      for s in ${SUBJ_LIST} ; do
+         echo ${s}
+         mkdir -p ${HTML_DIR}/${m}/images ${HTML_DIR}/${m}/thumbnails
+         for img in ${SUBJECTS_DIR}/${s}/shots/*_${m}_*.png ; do
+            bimg=$(basename ${img})
+            convert ${img} -background black -trim -gravity center -extent ${sizimg} -format png ${HTML_DIR}/${m}/images/${bimg}
+            convert ${HTML_DIR}/${m}/images/${bimg} -thumbnail ${sizthm} ${HTML_DIR}/${m}/thumbnails/${bimg}
+         done
+      done
+   done
+fi
+echo "Done!"

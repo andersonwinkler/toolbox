@@ -1,0 +1,119 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+cat <<EOU
+Create an HTML page to quickly inspect the surfaces of many
+subjects, using the "shots" produced by the 'takeshots' command.
+
+Usage: makehtml [options]
+
+The options are:
+-s <subjid>    : Specify one subject ID.
+-l <listid>    : Specify a file list with the subject IDs, one per line.
+-m <mesh>      : Specify a surface file (pial, white, inflated, sphere, etc).
+-p <parc>      : Specify a parcellation to load (aparc, a2009s, a2005s).
+-d <directory> : Specify the directory to save the resulting HTML page.
+-c             : Run also for curv.
+-u             : Run also for sulc.
+-t             : Run also for thickness.
+-y             : Run also for myelin maps
+-g             : Run also for white-gray contrast
+-v             : Run also for volumes (aseg + overlaid surfaces).
+
+* Important: This script requires ImageMagick (command 'convert'), and
+  that the FreeSurfer variable SUBJECTS_DIR has been set.
+
+_____________________________________
+Anderson M. Winkler
+Yale University / Institute of Living
+Jan/2010
+http://brainder.org
+Modified by Andre Zugman (NIMH/NIH)
+EOU
+exit 1
+fi
+
+# Check and accept the arguments
+DOASEG="N"
+DOSURF="N"
+DOCURV="N"
+DOSULC="N"
+DOTHCK="N"
+DOMYEL="N"
+DOWGPC="N"
+while getopts 's:l:m:p:d:cutygv' OPTION ; do
+   case ${OPTION} in
+      s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
+      l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
+      m) MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
+      p) PARC_LIST="${PARC_LIST} ${OPTARG}" ; DOSURF="Y" ;;
+      d) HTML_DIR="${OPTARG}" ;;
+      c) DOSURF="Y" ; DOCURV="Y" ; PARC_LIST="${PARC_LIST} curv" ;;
+      u) DOSURF="Y" ; DOSULC="Y" ; PARC_LIST="${PARC_LIST} sulc" ;;
+      t) DOSURF="Y" ; DOTHCK="Y" ; PARC_LIST="${PARC_LIST} thickness" ;;
+      y) DOSURF="Y" ; DOMYEL="Y" ; PARC_LIST="${PARC_LIST} myelin" ;;
+      g) DOSURF="Y" ; DOWGPC="Y" ; PARC_LIST="${PARC_LIST} w-g.pct.mgh" ;;
+      v) DOASEG="Y" ;;
+   esac
+done
+if [ "x${HTML_DIR}" == "x" ] ; then
+   echo "Output directory not specified"
+   exit 1 ;
+fi
+
+# Create the HTML files
+echo "Creating HTML pages"
+if [[ ${DOSURF} == "Y" ]] ; then
+for m in ${MESH_LIST} ; do
+   for p in ${PARC_LIST} ; do
+      htmlfile=${HTML_DIR}/${m}/${m}_${p}.html
+      echo "<html><title>Surface Results (${m}, ${p})</title><body><table>"  > ${htmlfile}
+      for s in ${SUBJ_LIST} ; do
+         echo "<tr>" >> ${htmlfile}
+         for view in lat med sup inf ; do for h in lh rh ; do 
+            echo "<td><a href=\"images/${s}_${h}_${m}_${p}_${view}.png\"><img src=\"thumbnails/${s}_${h}_${m}_${p}_${view}.png\" border=0 title=\"${s}, ${h}, ${m}, ${p}, ${view}\"></a></td>" >> ${htmlfile}
+         done ; done
+         echo "</tr>" >> ${htmlfile}
+      done
+      echo "</table></body></html>" >> ${htmlfile}
+   done
+done
+fi
+if [[ ${DOASEG} == "Y" ]] ; then
+   for m in aseg surfaces ; do
+      htmlfile=${HTML_DIR}/${m}/${m}.html
+      echo "<html><title>Volume Results (${m}, ${p})</title><body><table>"  > ${htmlfile}
+      for s in ${SUBJ_LIST} ; do
+         echo "<tr>" >> ${htmlfile}
+         for view in tra cor sag ; do
+            if   [[ ${view} == "tra" ]] ; then
+               slicelist="118 128 138"
+            elif [[ ${view} == "cor" ]] ; then
+               slicelist="068 088 098 108 118 128 138 148 158 168 188"
+            elif [[ ${view} == "sag" ]] ; then
+               slicelist="088 168"
+            fi
+            for sl in ${slicelist} ; do 
+               echo "<td><a href=\"images/${s}_${m}_${view}${sl}.png\"><img src=\"thumbnails/${s}_${m}_${view}${sl}.png\" border=0 title=\"${s}, ${m}, ${view}, slice=${sl}\"></a></td>" >> ${htmlfile}
+            done
+         done
+         echo "</tr>" >> ${htmlfile}
+      done
+      echo "</table></body></html>" >> ${htmlfile}
+   done
+fi
+
+# Create the index.html
+echo "<html><title>Inspect results</title><body><h1>Inspect results</h1><hr>"  > ${HTML_DIR}/index.html
+for m in ${MESH_LIST} ; do
+   for p in ${PARC_LIST} ; do
+      echo "<p><a href=\"${m}/${m}_${p}.html\">${m}: ${p}</a></p>" >> ${HTML_DIR}/index.html
+   done
+done
+if [[ ${DOASEG} == "Y" ]] ; then
+   for m in aseg surface ; do
+      echo "<p><a href=\"${m}/${m}.html\">volumes: ${m}</a></p>" >> ${HTML_DIR}/index.html
+   done
+fi
+echo "</table></body></html>" >> ${HTML_DIR}/index.html
+echo "Done!"

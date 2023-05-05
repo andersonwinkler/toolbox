@@ -4,7 +4,7 @@ if [ -z "$1" ]; then
 cat <<EOU
 Capture some screenshots of surfaces produced by
 FreeSurfer in standard orientations.
-This version uses freeview.
+This version uses FreeView.
 
 Usage: takeshots [options]
 
@@ -17,208 +17,232 @@ The options are:
 -u          : Run also for sulc.
 -t          : Run also for thickness.
 -y          : Run also for myelin maps (require ?h.myelin.mgz exist)
+-g          : Run also for white-gray contrast
 -v          : Run also for volumes (aseg + overlaid surfaces).
 
-_______________________________
-Anderson Winkler & Andre Zugman
+_____________________________________
+Anderson M. Winkler and Andre Zugman
 NIH / NIMH
-Oct/2021
+Mar/2022
 http://brainder.org
 EOU
 exit 1
 fi
 
-
 make_surf_cmd () {
 echo "
-   freeview -view lateral  -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_lat.tif
-   freeview -view medial   -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_med.tif
-   freeview -view inferior -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_inf.tif
-   freeview -cam elevation 180 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_sup.tif
+   freeview -view lateral      -nocursor -viewport 3d -viewsize 1200 1200 -zoom ${ZOOM} -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${m}_${WHAT}_lat.png 2 1
+   freeview -view medial       -nocursor -viewport 3d -viewsize 1200 1200 -zoom ${ZOOM} -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${m}_${WHAT}_med.png 2 1
+   freeview -view inferior     -nocursor -viewport 3d -viewsize 1200 1200 -zoom ${ZOOM} -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${m}_${WHAT}_inf.png 2 1
+   freeview -cam elevation 180 -nocursor -viewport 3d -viewsize 1200 1200 -zoom ${ZOOM} -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${m}_${WHAT}_sup.png 2 1
    exit" > ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd
    }
-    
+
 create_error_surf () {
-   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_lat.tif
-   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_med.tif
-   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_inf.tif
-   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_sup.tif
+   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_lat.png
+   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_med.png
+   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_inf.png
+   convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_${hemi}_${SURF}_${WHAT}_sup.png
 }
-      
+
 DOASEG="N"
 DOSURF="N"
 DOCURV="N"
 DOSULC="N"
 DOTHCK="N"
-MESH_LIST="white inflated"
-PARC_LIST="aparc"
+DOMYEL="N"
+DOWGPC="N"
+MESH_LIST=""
+PARC_LIST=""
 
-while getopts 's:l:m:p:cutyv' OPTION
-do
-  case ${OPTION} in
-    s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
-    l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
-    m) DOSURF="Y" ; MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
-    p) DOSURF="Y" ; PARC_LIST="${PARC_LIST} ${OPTARG}" ;;
-    c) DOSURF="Y" ; DOCURV="Y" ;;
-    u) DOSURF="Y" ; DOSULC="Y" ;;
-    t) DOSURF="Y" ; DOTHCK="Y" ;;
-    y) DOSURF="Y" ; DOMYEL="Y" ;;
-    v) DOASEG="Y" ;; 
-  esac
+while getopts 's:l:m:p:cutygv' OPTION ; do
+   case ${OPTION} in
+      s) SUBJ_LIST="${SUBJ_LIST} ${OPTARG}" ;;
+      l) SUBJ_LIST="${SUBJ_LIST} $(cat ${OPTARG})" ;;
+      m) DOSURF="Y" ; MESH_LIST="${MESH_LIST} ${OPTARG}" ;;
+      p) DOSURF="Y" ; PARC_LIST="${PARC_LIST} ${OPTARG}" ;;
+      c) DOSURF="Y" ; DOCURV="Y" ;;
+      u) DOSURF="Y" ; DOSULC="Y" ;;
+      t) DOSURF="Y" ; DOTHCK="Y" ;;
+      y) DOSURF="Y" ; DOMYEL="Y" ;;
+      g) DOSURF="Y" ; DOWGPC="Y" ;;
+      v) DOASEG="Y" ;; 
+   esac
 done
 
 # Takeshots for surfaces
 if [[ ${DOSURF} == "Y" ]] ; then
+   for m in ${MESH_LIST} ; do
+      lharea=$(mris_info ${SUBJECTS_DIR}/fsaverage/surf/lh.${m}|awk '$1 == "total_area" {print $2}')
+      rharea=$(mris_info ${SUBJECTS_DIR}/fsaverage/surf/rh.${m}|awk '$1 == "total_area" {print $2}')
+      refarea[${m}]=$(echo "${lharea} ${rharea} + p"|dc)
+   done
    for SUBJECT in ${SUBJ_LIST} ; do
       mkdir -p ${SUBJECTS_DIR}/${SUBJECT}/shots
-      for hemi in lh rh ; do
-         for m in ${MESH_LIST} ; do
-            SURF=${m}
-            for p in ${PARC_LIST} ; do
+      for m in ${MESH_LIST} ; do
+         lharea=$(mris_info ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.${m}|awk '$1 == "total_area" {print $2}')
+         rharea=$(mris_info ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.${m}|awk '$1 == "total_area" {print $2}')
+         ZOOM=$(echo "6k ${lharea} ${rharea} + ${refarea[${m}]} / v 2 / p"|dc)
+         for p in ${PARC_LIST} ; do
+            for hemi in lh rh ; do
                WHAT=${p}
                if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
                   make_surf_cmd
-                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:annot=${SUBJECTS_DIR}/${SUBJECT}/label/${hemi}.${WHAT}.annot -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -viewport 3d -continue
+                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:annot=${SUBJECTS_DIR}/${SUBJECT}/label/${hemi}.${WHAT}.annot -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -continue
                else
                   create_error_surf
                fi
             done
-            if [[ ${DOCURV} == "Y" ]] ; then
-               WHAT=curv
+         done
+         if [[ ${DOCURV} == "Y" ]] ; then
+            WHAT=curv
+            for hemi in lh rh ; do
                if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
                   make_surf_cmd
-                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -viewport 3d -continue
+                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -continue
                else
                   create_error_surf
-               fi      
-            fi
-            if [[ ${DOSULC} == "Y" ]] ; then
-	            WHAT=sulc
-	            if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
-		            make_surf_cmd
-		            freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -viewport 3d -continue
-	            else
-		            create_error_surf
-	            fi      
-            fi
-            if [[ ${DOTHCK} == "Y" ]] ; then
-               WHAT=thickness
-		         if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
-		            make_surf_cmd
-		            freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:overlay_threshold=0,4.5:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -viewport 3d -continue
-		         else
-		            create_error_surf
-		         fi
-            fi
-	         if [[ ${DOMYEL} == "Y" ]] ; then
-	            WHAT=myelin
-	            if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
-	               make_surf_cmd
-	               freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:overlay_threshold=0.5,1.5:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -viewport 3d -continue
-	            else
-	               create_error_surf
-	            fi         
-	         fi
-         done
+               fi
+            done
+         fi
+         if [[ ${DOSULC} == "Y" ]] ; then
+            WHAT=sulc
+            for hemi in lh rh ; do
+               if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
+                  make_surf_cmd
+                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -continue
+               else
+                  create_error_surf
+               fi
+            done
+         fi
+         if [[ ${DOTHCK} == "Y" ]] ; then
+            WHAT=thickness
+            for hemi in lh rh ; do
+               if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
+                  make_surf_cmd
+                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:overlay_threshold=0,4.5:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -continue
+               else
+                  create_error_surf
+               fi
+            done
+         fi
+         if [[ ${DOMYEL} == "Y" ]] ; then
+            WHAT=myelin
+            for hemi in lh rh ; do
+               if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
+                  make_surf_cmd
+                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:overlay_threshold=0.5,1.5:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -continue
+               else
+                  create_error_surf
+               fi
+            done
+         fi
+         if [[ ${DOWGPC} == "Y" ]] ; then
+            WHAT=w-g.pct.mgh
+            for hemi in lh rh ; do
+               if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m} ]] ; then
+                  make_surf_cmd
+                  freeview -f ${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${m}:overlay=${SUBJECTS_DIR}/${SUBJECT}/surf/${hemi}.${WHAT}:overlay_threshold=0,100:curvature_method=off -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd -continue
+               else
+                  create_error_surf
+               fi
+            done
+         fi
       done
-      rm -f ${SUBJECTS_DIR}/${SUBJECT}/shots/surf.cmd
    done
 fi
 
-# Take shots for volumes and aseg
+# Do for Volume and ASEG
 if [[ ${DOASEG} == "Y" ]] ; then
    for SUBJECT in ${SUBJ_LIST} ; do
       mkdir -p ${SUBJECTS_DIR}/${SUBJECT}/shots
-      if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz ]] && \
-         [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.white     ]] && \
-         [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.white     ]] && \
-         [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.pial      ]] ; then
-	      echo "
-	      freeview -viewport coronal  -slice 128 128 068 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor068.tif
-	      freeview -viewport coronal  -slice 128 128 088 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor088.tif
-	      freeview -viewport coronal  -slice 128 128 098 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor098.tif
-	      freeview -viewport coronal  -slice 128 128 108 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor108.tif
-	      freeview -viewport coronal  -slice 128 128 118 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor118.tif
-	      freeview -viewport coronal  -slice 128 128 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor128.tif
-	      freeview -viewport coronal  -slice 128 128 138 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor138.tif
-	      freeview -viewport coronal  -slice 128 128 148 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor148.tif
-	      freeview -viewport coronal  -slice 128 128 158 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor158.tif
-	      freeview -viewport coronal  -slice 128 128 168 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor168.tif
-	      freeview -viewport coronal  -slice 128 128 188 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor188.tif
-	      freeview -viewport axial    -slice 128 118 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra118.tif
-	      freeview -viewport axial    -slice 128 128 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra128.tif
-	      freeview -viewport axial    -slice 128 138 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra138.tif
-	      freeview -viewport sagittal -slice  88 118 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag088.tif
-	      freeview -viewport sagittal -slice 168 118 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag168.tif
-	      exit" > ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
-         freeview -v ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz -continue \
-            -f ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.white:edgecolor='139,0,0' \
-            -f ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.white:edgecolor='139,0,0' \
-            -f ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.pial \
-            -f ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.pial \
-            -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
-         rm -f ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
-      else
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor068.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor088.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor098.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor108.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor118.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor128.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor138.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor148.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor158.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor168.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor188.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/{SUBJECT}_surfaces_tra118.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra128.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra138.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag088.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag168.tif
-      fi
-      
-      if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz ]] && [[ -f ${SUBJECTS_DIR}/${SUBJECT}/mri/aparc+aseg.mgz ]] ; then
-	      echo "
-	      freeview -viewport coronal  -slice 128 128 068 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor068.tif
-	      freeview -viewport coronal  -slice 128 128 088 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor088.tif
-	      freeview -viewport coronal  -slice 128 128 098 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor098.tif
-	      freeview -viewport coronal  -slice 128 128 108 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor108.tif
-	      freeview -viewport coronal  -slice 128 128 118 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor118.tif
-	      freeview -viewport coronal  -slice 128 128 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor128.tif
-	      freeview -viewport coronal  -slice 128 128 138 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor138.tif
-	      freeview -viewport coronal  -slice 128 128 148 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor148.tif
-	      freeview -viewport coronal  -slice 128 128 158 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor158.tif
-	      freeview -viewport coronal  -slice 128 128 168 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor168.tif
-	      freeview -viewport coronal  -slice 128 128 188 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor188.tif
-	      freeview -viewport axial    -slice 128 118 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra118.tif
-	      freeview -viewport axial    -slice 128 128 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra128.tif
-	      freeview -viewport axial    -slice 128 138 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra138.tif
-	      freeview -viewport sagittal -slice  88 118 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag088.tif
-	      freeview -viewport sagittal -slice 168 118 128 -nocursor -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag168.tif
-	      exit" > ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
-         freeview -v ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz -continue \
-                  -v ${SUBJECTS_DIR}/${SUBJECT}/mri/aparc+aseg.mgz:lut=${FREESURFER_HOME}/FreeSurferColorLUT.txt:opacity=0.12 \
+      echo "
+      freeview  -slice 128 128 068 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor068.png 2 1
+      freeview  -slice 128 128 088 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor088.png 2 1
+      freeview  -slice 128 128 098 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor098.png 2 1
+      freeview  -slice 128 128 108 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor108.png 2 1
+      freeview  -slice 128 128 118 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor118.png 2 1
+      freeview  -slice 128 128 128 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor128.png 2 1
+      freeview  -slice 128 128 138 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor138.png 2 1
+      freeview  -slice 128 128 148 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor148.png 2 1
+      freeview  -slice 128 128 158 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor158.png 2 1
+      freeview  -slice 128 128 168 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor168.png 2 1
+      freeview  -slice 128 128 188 -nocursor -viewport coronal  -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor188.png 2 1
+      freeview  -slice 128 118 128 -nocursor -viewport axial    -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra118.png 2 1
+      freeview  -slice 128 128 128 -nocursor -viewport axial    -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra128.png 2 1
+      freeview  -slice 128 138 128 -nocursor -viewport axial    -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra138.png 2 1
+      freeview  -slice  88 118 128 -nocursor -viewport sagittal -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag088.png 2 1
+      freeview  -slice 168 118 128 -nocursor -viewport sagittal -viewsize 1200 1200 -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag168.png 2 1
+      exit" > ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
+
+      if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz ]] && [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.white ]] && [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.white ]] && [[ -f ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.pial ]] ; then
+         freeview -v   ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz -continue \
+                  -f   ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.white:edgecolor='139,0,0' \
+                  -f   ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.white:edgecolor='139,0,0' \
+                  -f   ${SUBJECTS_DIR}/${SUBJECT}/surf/lh.pial \
+                  -f   ${SUBJECTS_DIR}/${SUBJECT}/surf/rh.pial \
+                  -viewsize 1200 1200 \
                   -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
-         rm -f ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
       else
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor068.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor088.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor098.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor108.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor118.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor128.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor138.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor148.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor158.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor168.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor188.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/{SUBJECT}_aseg_tra118.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra128.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra138.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag088.tif
-         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"Not created." ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag168.tif
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor068.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor088.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor098.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor108.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor118.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor128.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor138.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor148.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor158.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor168.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_cor188.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra118.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra128.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_tra138.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag088.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_surfaces_sag168.png
       fi
-      
+
+      echo "
+      freeview  -slice 128 128 068 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor068.png 2 1
+      freeview  -slice 128 128 088 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor088.png 2 1
+      freeview  -slice 128 128 098 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor098.png 2 1
+      freeview  -slice 128 128 108 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor108.png 2 1
+      freeview  -slice 128 128 118 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor118.png 2 1
+      freeview  -slice 128 128 128 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor128.png 2 1
+      freeview  -slice 128 128 138 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor138.png 2 1
+      freeview  -slice 128 128 148 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor148.png 2 1
+      freeview  -slice 128 128 158 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor158.png 2 1
+      freeview  -slice 128 128 168 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor168.png 2 1
+      freeview  -slice 128 128 188 -nocursor -viewport coronal  -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor188.png 2 1
+      freeview  -slice 128 118 128 -nocursor -viewport axial    -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra118.png 2 1
+      freeview  -slice 128 128 128 -nocursor -viewport axial    -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra128.png 2 1
+      freeview  -slice 128 138 128 -nocursor -viewport axial    -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra138.png 2 1
+      freeview  -slice  88 118 128 -nocursor -viewport sagittal -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag088.png 2 1
+      freeview  -slice 168 118 128 -nocursor -viewport sagittal -zoom 1 -ss ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag168.png 2 1
+      exit" > ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
+      if [[ -f ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz ]] && [[ -f ${SUBJECTS_DIR}/${SUBJECT}/mri/aparc+aseg.mgz ]] ; then
+         freeview -v   ${SUBJECTS_DIR}/${SUBJECT}/mri/brainmask.mgz -continue \
+                  -v   ${SUBJECTS_DIR}/${SUBJECT}/mri/aparc+aseg.mgz:lut=${FREESURFER_HOME}/FreeSurferColorLUT.txt:opacity=0.12:colormap=lut \
+                  -cmd ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
+      else
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor068.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor088.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor098.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor108.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor118.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor128.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor138.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor148.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor158.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor168.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_cor188.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra118.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra128.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_tra138.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag088.png
+         convert -background black -font Arial -size 264x264 -pointsize 12 -gravity center -fill white label:"File does not exist" ${SUBJECTS_DIR}/${SUBJECT}/shots/${SUBJECT}_aseg_sag168.png
+      fi
+      rm ${SUBJECTS_DIR}/${SUBJECT}/shots/volume.cmd
    done
 fi
