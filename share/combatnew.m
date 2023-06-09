@@ -1,4 +1,4 @@
-function [bayesdata,stand_mean,var_pooled,gamma_star,delta_star] = combat(dat,batch,mod,parametric)
+function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star] = combat(dat,batch,mod,parametric)
 % This is an edit of the original combat.m such that the
 % harmonization parameters are produced.
 % Other edits make the parametric adjustment much faster for large
@@ -36,7 +36,7 @@ end
 if size(dat,1) ~= N
     error('"dat" must have as many rows as number of elements in "batch"');
 end
-if size(mod,1) ~= N
+if numel(mod) > 0 && size(mod,1) ~= N
     error('"mod" must have as many rows as number of elements in "batch"');
 end
 nD = size(dat,2);

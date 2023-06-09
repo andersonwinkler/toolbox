@@ -1,4 +1,4 @@
-function bayesdata = combatapply(dat,batch,batch0,stand_mean,var_pooled,gamma_star,delta_star)
+function bayesdata = combatapply(dat,batch,mod,batch0,grand_mean,B_hat,var_pooled,gamma_star,delta_star)
 % This applies the harmonization parameters found with ComBat to new data
 % 
 % The original ComBat can be found at https://github.com/Jfortin1/ComBatHarmonization
@@ -26,7 +26,7 @@ function bayesdata = combatapply(dat,batch,batch0,stand_mean,var_pooled,gamma_st
 levels0   = unique(batch0);
 levels    = unique(batch);
 shared    = intersect(levels,levels0);
-if any(levels ~= shared)
+if numel(levels) ~= numel(shared) || any(levels ~= shared)
     error('Some batches were not present in the original run of ComBat');
 end
 n_batch   = numel(levels0);
@@ -34,12 +34,14 @@ bidx      = cell(n_batch,1);
 for b = 1:n_batch
     bidx{b} = batch == b;
 end
-s_data = (dat-stand_mean)./sqrt(var_pooled);
-bayesdata = zeros(size(s_data));
+mod        = mod - mean(mod);
+stand_mean = grand_mean + mod*B_hat(n_batch+1:end,:);
+s_data     = (dat-stand_mean)./sqrt(var_pooled);
+bayesdata  = zeros(size(s_data));
 for b = 1:n_batch
     if ~ isempty(bidx{b})
         idx = bidx{b};
         bayesdata(idx,:) = (s_data(idx,:)-gamma_star(b,:))./sqrt(delta_star(b,:));
     end
 end
-bayesdata = bayesdata.*sqrt(var_pooled) + stand_mean;
+bayesdata  = bayesdata.*sqrt(var_pooled) + stand_mean;
