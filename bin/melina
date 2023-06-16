@@ -59,10 +59,17 @@ mkdir -p ${SUBJECTS_DIR}/${subj}/melina
 
 if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
 
+   # Find out whether recon-all used "-hires" or not
+   if [[ $(grep --regexp="recon-all.*-hires" ${SUBJECTS_DIR}/${subj}/scripts/recon-all.log|wc -l) -eq 0 ]] ; then
+      CONFORM_FLAG="--conform"
+   else
+      CONFORM_FLAG="--conform_min"
+   fi
+
    # Conform rawavg, but without changing the datatype
    ${FREESURFER_HOME}/bin/mri_convert \
       ${SUBJECTS_DIR}/${subj}/mri/rawavg.mgz \
-      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz --conform --nochange
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz ${CONFORM_FLAG} --nochange
 
    # Compute the myelin surrogate
    ${FREESURFER_HOME}/bin/fscalc \
@@ -75,22 +82,22 @@ if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
       -i ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.mgz \
       -o ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz
 
-	# Convert aseg to NIFTI, dilate just a bit, so that we can use later for
-	# masking before doing FAST
-	${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+   # Convert aseg to NIFTI, dilate just a bit, so that we can use later for
+   # masking before doing FAST
+   ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
       -i ${SUBJECTS_DIR}/${subj}/mri/aparc+aseg.mgz \
       -o ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.nii.gz
    echo "Running fslmaths twice (for dilation and for masking)"
-	${FSLDIR}/bin/fslmaths \
-	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.nii.gz \
-	   -bin -kernel 3D -dilM \
-	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz
+   ${FSLDIR}/bin/fslmaths \
+      ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg.nii.gz \
+      -bin -kernel 3D -dilM \
+      ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz
    
-	# Mask the orig_nochange, so we can use FAST properly
-	${FSLDIR}/bin/fslmaths \
-	   ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz -mul \
-	   ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz \
-	   ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked.nii.gz
+   # Mask the orig_nochange, so we can use FAST properly
+   ${FSLDIR}/bin/fslmaths \
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz -mul \
+      ${SUBJECTS_DIR}/${subj}/melina/aparc+aseg_mask_dilated.nii.gz \
+      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked.nii.gz
 
    # Segment using FAST, and convert back to MGZ
    echo "Running FAST."
@@ -113,24 +120,24 @@ if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
       ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_1+2.mgz \
       --o ${SUBJECTS_DIR}/${subj}/melina/myelin_pvc.mgz
 
-	# Now that PVC has been applied, let's also obtain the average value for GM, WM and CSF
-	# for this participant. We only want the "best" voxels, so let's erode a bit.
-	${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
+   # Now that PVC has been applied, let's also obtain the average value for GM, WM and CSF
+   # for this participant. We only want the "best" voxels, so let's erode a bit.
+   ${FREESURFER_HOME}/bin/mri_convert -it mgz -ot nii \
       -i ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz \
       -o ${SUBJECTS_DIR}/${subj}/melina/myelin.nii.gz
    Mstr=""
-	for p in 0 1 2 ; do
-	   ${FSLDIR}/bin/fslmaths \
-	      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
-	      -bin -kernel boxv 3 -ero \
-	      -mul \
-	      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
-	      -mul \
-	      ${SUBJECTS_DIR}/${subj}/melina/myelin.nii.gz \
-	      ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_${p}_eroded.nii.gz
-	   M=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_${p}_eroded.nii.gz -M)
-	   Mstr="${Mstr}${M},"
-	done
+   for p in 0 1 2 ; do
+      ${FSLDIR}/bin/fslmaths \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
+         -bin -kernel boxv 3 -ero \
+         -mul \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_${p}.nii.gz \
+         -mul \
+         ${SUBJECTS_DIR}/${subj}/melina/myelin.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_${p}_eroded.nii.gz
+      M=$(${FSLDIR}/bin/fslstats ${SUBJECTS_DIR}/${subj}/melina/myelin_pve_${p}_eroded.nii.gz -M)
+      Mstr="${Mstr}${M},"
+   done
    echo "${Mstr}" | sed 's/\ //g' > ${SUBJECTS_DIR}/${subj}/melina/tissue_intensities.csv
 
    # Remove unused files
@@ -140,7 +147,7 @@ if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
          ${SUBJECTS_DIR}/${subj}/melina/orig_nochange.nii.gz \
          ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked.nii.gz \
          ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_seg.nii.gz \
-	      ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_?.nii.gz \
+         ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_?.nii.gz \
          ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pveseg.nii.gz \
          ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_mixeltype.nii.gz \
          ${SUBJECTS_DIR}/${subj}/melina/orig_nochange_masked_pve_?.mgz \
@@ -150,38 +157,38 @@ if [[ ${TYPE} == "T2" ]] || [[ ${TYPE} == "FLAIR" ]] ; then
           
    # Project to the surface, using fraction of distance between white (0) and pial (1)
    if [[ ${PF_LIST} != "" ]] ; then
-	   for pf in ${PF_LIST} ; do
-	      pfstr="f_${pf}"
-	      for h in lh rh ; do
-	         ${FREESURFER_HOME}/bin/mri_vol2surf \
-	            --mov ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz \
-	            --regheader ${subj} --projfrac ${pf} --interp trilinear \
-	            --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}.mgz
-	         ${FREESURFER_HOME}/bin/mris_convert -c \
-	            ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}.mgz \
-	            ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
-	            ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}
-	         rm -f ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}.mgz
-	      done
-	   done
+      for pf in ${PF_LIST} ; do
+         pfstr="f_${pf}"
+         for h in lh rh ; do
+            ${FREESURFER_HOME}/bin/mri_vol2surf \
+               --mov ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz \
+               --regheader ${subj} --projfrac ${pf} --interp trilinear \
+               --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}.mgz
+            ${FREESURFER_HOME}/bin/mris_convert -c \
+               ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}.mgz \
+               ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
+               ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}
+            rm -f ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pfstr}.mgz
+         done
+      done
    fi
    
    # Project to the surface, using a distance from the white.
    if [[ ${PD_LIST} != "" ]] ; then
-	   for pd in ${PD_LIST} ; do
-	      pdstr="d_${pd}mm"
-	      for h in lh rh ; do
-	         ${FREESURFER_HOME}/bin/mri_vol2surf \
-	            --mov ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz \
-	            --regheader ${subj} --projdist ${pd} --interp trilinear \
-	            --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}.mgz
-	         ${FREESURFER_HOME}/bin/mris_convert -c \
-	            ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}.mgz \
-	            ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
-	            ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}
-	         rm -f ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}.mgz
-	      done
-	   done
+      for pd in ${PD_LIST} ; do
+         pdstr="d_${pd}mm"
+         for h in lh rh ; do
+            ${FREESURFER_HOME}/bin/mri_vol2surf \
+               --mov ${SUBJECTS_DIR}/${subj}/melina/myelin.mgz \
+               --regheader ${subj} --projdist ${pd} --interp trilinear \
+               --hemi ${h} --o ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}.mgz
+            ${FREESURFER_HOME}/bin/mris_convert -c \
+               ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}.mgz \
+               ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
+               ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}
+            rm -f ${SUBJECTS_DIR}/${subj}/melina/${h}.myelin.${pdstr}.mgz
+         done
+      done
    fi
 
 else # Compute the GWC
@@ -211,65 +218,65 @@ else # Compute the GWC
    done
 
    for h in lh rh ; do
-	   ${FREESURFER_HOME}/bin/fscalc \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.1.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.2.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.3.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.4.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.5.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.6.mgz div 6 \
-	      --o ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz
-	   ${FREESURFER_HOME}/bin/fscalc \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.15mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.30mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.45mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.60mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.75mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.90mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.05mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.20mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.35mm.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.50mm.mgz div 10 \
-	      --o ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz
-	   ${FREESURFER_HOME}/bin/fscalc \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz sub \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz mul 100 \
-	      --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.diff.mgz
-	   ${FREESURFER_HOME}/bin/fscalc \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz add \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz div 2 \
-	      --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mean.mgz
-	   ${FREESURFER_HOME}/bin/fscalc \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.diff.mgz div \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mean.mgz \
-	      --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz
-	   ${FREESURFER_HOME}/bin/mris_convert -c \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz \
-	      ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc
+      ${FREESURFER_HOME}/bin/fscalc \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.1.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.2.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.3.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.4.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.5.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.6.mgz div 6 \
+         --o ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz
+      ${FREESURFER_HOME}/bin/fscalc \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.15mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.30mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.45mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.60mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.75mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.90mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.05mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.20mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.35mm.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.50mm.mgz div 10 \
+         --o ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz
+      ${FREESURFER_HOME}/bin/fscalc \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz sub \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz mul 100 \
+         --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.diff.mgz
+      ${FREESURFER_HOME}/bin/fscalc \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz add \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz div 2 \
+         --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mean.mgz
+      ${FREESURFER_HOME}/bin/fscalc \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.diff.mgz div \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mean.mgz \
+         --o ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz
+      ${FREESURFER_HOME}/bin/mris_convert -c \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz \
+         ${SUBJECTS_DIR}/${subj}/surf/${h}.white \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc
 
       # Remove unused files
-	   rm -f \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.1.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.2.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.3.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.4.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.5.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.6.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.15mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.30mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.45mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.60mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.75mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.90mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.05mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.20mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.35mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.50mm.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.diff.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mean.mgz \
-	      ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz
+      rm -f \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.1.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.2.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.3.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.4.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.5.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_0.6.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.15mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.30mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.45mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.60mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.75mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_0.90mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.05mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.20mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.35mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_1.50mm.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.graylayer.f_avg.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.whitelayer.d_avg.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.diff.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mean.mgz \
+         ${SUBJECTS_DIR}/${subj}/melina/${h}.gwc.mgz
    done
 fi
