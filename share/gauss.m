@@ -41,7 +41,7 @@ if D > 4;
 end
 
 % Make the filter for each dimension (one axis only)
-sigmas = fwhms./(8*sqrt(log(2)));
+sigmas = fwhms./sqrt(8*log(2));
 lims   = (siz-1)/2;
 ax     = cell(D,1);
 g      = ax;
