@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/octave-cli --no-window-system
 % function rpncalc(varargin)
 % Do some simple calculations using RPN notation.
 %
@@ -13,7 +13,7 @@
 %   Multiplicative (matrix): **, //, \\ and ^^
 %   Logic: <, >, <=. >=, ==, ~=
 %   Comparisons: min, max
-% Mathematical operators (unary): log, ln, exp, isnan, isinf, sign
+% Mathematical operators (unary): log, ln, exp, isnan, isinf
 % Stack manipulation: swap dup drop
 % File operations: load save
 %
@@ -29,16 +29,15 @@
 % Nov/2014 (this version)
 % http://brainder.org
 
-% Check if Octave or Matlab
-if exist('OCTAVE_VERSION','builtin') ~= 0,
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
+    % Get the inputs
+    varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
-
-    % Get the inputs
-    varargin = argv();
-    nargin = numel(varargin);
-
 end
 
 % Print usage if no inputs are given
@@ -73,8 +72,6 @@ if isempty(varargin) || strcmp(varargin{1},'-q'),
     fprintf('http://brainder.org\n');
     return;
 end
-
-% More OCTAVE stuff
 
 % Define the operators
 opadd   = {'+','-'};
@@ -194,7 +191,7 @@ for a = 1:nargin,
         
     elseif strcmpi('log',varargin{a});
         
-        % LOGARITHM (10)
+        % LOGARITHM
         
         % Compute the log of the 1st element in the stack
         fprintf('Taking the base-10 logarithm.\n')
@@ -202,7 +199,7 @@ for a = 1:nargin,
         
     elseif strcmpi('ln',varargin{a});
         
-        % LOGARITHM (NATURAL)
+        % LOGARITHM
         
         % Compute the log of the 1st element in the stack
         fprintf('Taking the natural logarithm.\n')
@@ -215,14 +212,6 @@ for a = 1:nargin,
         % Compute the log of the 1st element in the stack
         fprintf('Exponentiating.\n')
         stack{1} = exp(stack{1});
-
-    elseif strcmpi('sign',varargin{a});
-        
-        % SIGN
-        
-        % Compute the log of the 1st element in the stack
-        fprintf('Taking the sign.\n')
-        stack{1} = sign(stack{1});
 
     elseif strcmpi('isnan',varargin{a});
         

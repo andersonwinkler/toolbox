@@ -25,10 +25,12 @@ function applyolp(varargin)
 % Aug/2011
 % http://brainder.org
 
-% OCTAVE stuff, with TRY to ensure MATLAB compatibility
-try
+% Do some OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

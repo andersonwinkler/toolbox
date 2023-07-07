@@ -15,10 +15,12 @@ function midsrf(srf1,srf2,srfout)
 % Yale University / Institute of Living
 % Feb/2011
 
-% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);;
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -48,7 +50,6 @@ try
         srfout = varargin{3};
     end
 end
-
 
 % Read the surface files
 [vtx1,fac1] = srfread(srf1);

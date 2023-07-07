@@ -18,10 +18,12 @@ function dpxlab = dpxlabelling(varargin)
 % Feb/2012
 % http://brainder.org
 
-% Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -48,7 +50,6 @@ try
         return;
     end
 end
-nargin = numel(varargin);
 
 % Accept arguments
 if nargin < 3

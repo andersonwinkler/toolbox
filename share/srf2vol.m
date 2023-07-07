@@ -23,10 +23,12 @@ function srf2vol(varargin)
 % May/2013
 % http://brainder.org
 
-% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin   = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

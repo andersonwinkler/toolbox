@@ -19,11 +19,12 @@ function dpx2avg(varargin)
 % Yale University / Institute of Living
 % Jul/2011
 
-
-% Do OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -53,10 +54,6 @@ try
         return;
     end
 end
-
-% This is redundant in MATLAB, but fixes a certain issue in OCTAVE
-nargin = numel(varargin); 
-
 if nargin < 3.
     error('Please, supply at least 3 arguments.\nFor lore, you can use ''rpncalc''.');
 end

@@ -27,10 +27,12 @@ function clusterstats2(varargin)
 % Feb/2012
 % http://brainder.org
 
-% Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do some OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -74,7 +76,6 @@ d.measout    = 1;      % arg 5
 d.sizeout    = 1;      % arg 6
 
 % Accept arguments
-nargin = numel(varargin);
 if nargin > 5,
     error('Invalid number of arguments')
 end

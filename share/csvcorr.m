@@ -9,10 +9,12 @@ function C = csvcorr(varargin)
 % Jun/2016
 % http://brainder.org
 
-% Do the OCTAVE stuff, with TRY to ensure MATLAB compatibility
-try %#ok
+% Do some OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -23,10 +25,6 @@ try %#ok
         return;
     end
 end
-
-% More OCTAVE stuff
-nargin = numel(varargin);
-
 if nargin > 1,
     error('Too many arguments');
 end

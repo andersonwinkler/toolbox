@@ -22,9 +22,11 @@ function vol2dpv(varargin)
 % http://brainder.org
 
 % Do OCTAVE stuff
-try
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin   = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -58,7 +60,6 @@ try
         return;
     end
 end
-nargin = numel(varargin);
 
 % Check number of arguments
 if nargin < 2 || nargin > 4,

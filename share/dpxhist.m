@@ -10,10 +10,12 @@ function dpxhist(varargin)
 % Yale University / Institute of Living
 % Oct/2011
 
-% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -35,7 +37,6 @@ try
 end
 
 % Loop over images
-nargin = numel(varargin);
 dpx = [];
 for a = 2:nargin, % 1st cell contain the file name for the histogram
     fprintf('Reading file %s\n',varargin{a});

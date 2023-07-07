@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/octave-cli --no-window-system
 % function mergesrf(varargin)
 % Merge multiple surface files in *.srf format
 % into a single file.
@@ -12,10 +12,12 @@
 % Jul/2012
 % http://brainder.org
 
-% Do the OCTAVE stuff, with TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -37,7 +39,6 @@ try
         return;
     end
 end
-nargin = numel(varargin); % for octave
 
 if nargin < 2,
     error('Error: insufficient number of arguments.\n')

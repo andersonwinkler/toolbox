@@ -1,5 +1,5 @@
-#!/usr/bin/octave -q
-%function explode_gmsh4(varargin)
+#!/usr/bin/octave-cli --no-window-system
+% function explode_gmsh4(varargin)
 % "Explode" a Gmesh4 (.msh) file into
 % .srf and .dpv files.
 % 
@@ -12,10 +12,12 @@
 % Oct/2021
 % http://brainder.org
 
-% Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -38,7 +40,6 @@ try
 end
 
 % Take input arguments
-nargin = numel(varargin);
 if nargin ~= 2,
     error('Invalid number of arguments');
 end

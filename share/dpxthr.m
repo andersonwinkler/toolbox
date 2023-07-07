@@ -16,10 +16,12 @@ function dpxthr(varargin)
 % FMRIB / University of Oxford
 % Feb/2012
 
-% Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

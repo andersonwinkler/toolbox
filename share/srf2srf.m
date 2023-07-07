@@ -45,10 +45,12 @@ function srf2srf(varargin)
 % Start assuming this is MATLAB; change below
 isoct = false;
 
-% OCTAVE stuff, with TRY to ensure MATLAB compatibility
-try %#ok
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin   = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -117,7 +119,6 @@ else
     expnarg = [5 6]; % Expected number of arguments
     fields = {'fsrf1','fsrf2','fcrv1','fcrv2','fsrfR'};
 end
-nargin = numel(varargin); % This is redundant in MATLAB, but fixes a certain behaviour in OCTAVE
 if nargin < expnarg(1) || nargin > expnarg(2),
     error('Invalid number of arguments');
 end

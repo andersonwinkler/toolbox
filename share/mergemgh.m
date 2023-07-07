@@ -11,10 +11,12 @@ function mergemgh(varargin)
 % Jun/2016
 % http://brainder.org
 
-% Do the OCTAVE stuff, with TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -36,7 +38,6 @@ try
         return;
     end
 end
-nargin = numel(varargin); % for octave
 
 if nargin < 2,
     error('Error: insufficient number of arguments.\n')

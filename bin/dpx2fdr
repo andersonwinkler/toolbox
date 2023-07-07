@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/octave-cli --no-window-system
 % function dpx2fdr(varargin)
 % For a set of DPV/DPF files containing p-values, return the
 % FDR threshold (single value) and the FDR corrected and FDR-adjusted
@@ -27,11 +27,12 @@
 % Yale University / Institute of Living
 % Aug/2011
 
-% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
-    nargin = numel(varargin);
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

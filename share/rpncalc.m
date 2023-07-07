@@ -28,16 +28,16 @@ function rpncalc(varargin)
 % Nov/2014 (this version)
 % http://brainder.org
 
-% Check if Octave or Matlab
-if exist('OCTAVE_VERSION','builtin') ~= 0,
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
+    % Get the inputs
+    varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
-
-    % Get the inputs
-    varargin = argv();
 end
-nargin = numel(varargin);
 
 % Print usage if no inputs are given
 if isempty(varargin) || strcmp(varargin{1},'-q'),
@@ -71,8 +71,6 @@ if isempty(varargin) || strcmp(varargin{1},'-q'),
     fprintf('http://brainder.org\n');
     return;
 end
-
-% More OCTAVE stuff
 
 % Define the operators
 opadd   = {'+','-'};

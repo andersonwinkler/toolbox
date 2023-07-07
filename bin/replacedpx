@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/octave-cli --no-window-system
 % function replacedpx(varargin)
 % Replace values in a DPV/DPF file. The correspondence between
 % old and new values is provided by a CSV table.
@@ -20,10 +20,12 @@
 % Sep/2011
 % http://brainder.org
 
-% Do the OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

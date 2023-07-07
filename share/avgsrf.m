@@ -10,10 +10,12 @@ function avgsrf(varargin)
 % Aug/2014
 % http://brainder.org
 
-% OCTAVE stuff
-try %#ok
+% Do some OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -35,7 +37,6 @@ try %#ok
 end
 
 % Number of input surfaces
-nargin = numel(varargin);
 N = nargin - 1;
 
 % For each input surface

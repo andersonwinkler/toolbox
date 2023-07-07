@@ -1,5 +1,4 @@
-#!/usr/bin/octave-cli --no-window-system
-% #!/usr/local/apps/octave/4.4.0/bin/octave -q
+#!/usr/local/apps/octave/4.4.0/bin/octave -q
 % function roimeants(varargin)
 %
 % Usage:

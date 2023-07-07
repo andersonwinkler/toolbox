@@ -15,10 +15,12 @@ function applymat2srf(varargin)
 % Feb/2014
 % http://brainder.org
 
-% Do OCTAVE stuff
-try
+% Do some OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -43,7 +45,6 @@ try
         return;
     end
 end
-nargin = numel(varargin);
 
 % Take arguments & load data
 if nargin ~= 3,

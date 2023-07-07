@@ -15,9 +15,12 @@ function dpv2xyz(varargin)
 % FMRIB / Oxford University
 % Jan/2012
 
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

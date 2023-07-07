@@ -108,9 +108,12 @@ function slicetiming(varargin)
 % Darren Gitelman et al.
 % $Id: spm_slice_timing.m 6130 2014-08-01 17:41:18Z guillaume $
 
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin   = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

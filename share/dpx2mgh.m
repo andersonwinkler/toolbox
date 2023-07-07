@@ -15,10 +15,12 @@ function dpx2mgh(varargin)
 % Jul/2015
 % http://brainder.org
 
-% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility:
-try %#ok
-    % Get the inputs:
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
+    % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM:
     sigterm_dumps_octave_core(0);
@@ -55,9 +57,6 @@ if ~ exist('save_mgh','file'),
         addpath(fullfile(fshome,'matlab'));
     end
 end
-
-% Check number of arguments:
-nargin = numel(varargin); % this is redundant but addresses a bug
 if nargin < 2,
     error('Insufficient number of arguments.');
 end

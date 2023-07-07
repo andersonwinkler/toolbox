@@ -1,4 +1,4 @@
-#!/usr/bin/octave -q
+#!/usr/bin/octave-cli --no-window-system
 % function maskdpx(varargin)
 % Masks out the 'unknown' region from a DPV/DPF file
 % replacing its original values by a given new value
@@ -20,11 +20,12 @@
 % Yale University / Institute of Living
 % Jul/2011
 
-% Do OCTAVE stuff, but use TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
-    nargin = numel(varargin);
+    nargin  = numel(varargin);
 
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);

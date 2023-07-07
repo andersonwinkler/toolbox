@@ -15,8 +15,9 @@ function srf2tri(srffile,trifile,radius)
 % Jul/2014
 % http:/brainder.org
 
-% Do some OCTAVE stuff, but use TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
     nargin   = numel(varargin);

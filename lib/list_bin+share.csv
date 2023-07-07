@@ -3,6 +3,7 @@ applymat2srf
 applyolp
 avgsrf
 clusterstats
+concatdpx
 dpf2dpv
 dpv2dpf
 dpv2png
@@ -14,6 +15,7 @@ dpxhist
 dpxlabelling
 dpxstats
 dpxthr
+explode_gmsh4
 icodown
 imputedpx
 maskdpx
@@ -23,6 +25,7 @@ midsrf
 platonic
 replacedpx
 retessellate
+roimeants
 rpncalc
 slicetiming
 smoothdpx

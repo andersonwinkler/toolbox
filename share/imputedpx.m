@@ -34,10 +34,12 @@ function imputedpx(varargin)
 % Yale University
 % Apr/2012
 
-% Do OCTAVE stuff, using TRY to ensure MATLAB compatibility
-try
+% Do OCTAVE stuff
+if exist('argv','builtin') && ~ exist('varargin','var')
+    
     % Get the inputs
     varargin = argv();
+    nargin  = numel(varargin);
     
     % Disable memory dump on SIGTERM
     sigterm_dumps_octave_core(0);
@@ -93,7 +95,6 @@ d.maskfile = '';
 % Accept arguments
 vr = d;
 fields = fieldnames(vr);
-nargin = numel(varargin);
 for a = 1:nargin,
     vr.(fields{a}) = varargin{a};
 end
