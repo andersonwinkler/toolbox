@@ -1,4 +1,4 @@
-function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star] = combat(dat,batch,mod,parametric)
+function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star] = combatnew(dat,batch,mod,parametric)
 % This is an edit of the original combat.m such that the
 % harmonization parameters are produced.
 % Other edits make the parametric adjustment much faster for large
