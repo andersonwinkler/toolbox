@@ -28,6 +28,7 @@ def printHelp(argv, description): # ===========================================
     print("-n : Input directory from NIDB export, with .nii.gz and .json files.")
     print("-b : Output BIDS directory.")
     print("-r : Renumber entities as 1, 2, 3, etc.")
+    print("-s : Use study name as subject name.")
     print("")
     print("_____________________________________")
     print("Anderson M. Winkler")
