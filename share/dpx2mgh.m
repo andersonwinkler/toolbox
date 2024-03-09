@@ -44,6 +44,8 @@ if exist('argv','builtin') && ~ exist('varargin','var')
         fprintf('http://brainder.org\n');
         return;
     end
+else
+    nargin = numel(varargin);
 end
 
 % Before doing all the work, make sure the save_mgh is available:

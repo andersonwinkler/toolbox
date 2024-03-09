@@ -50,6 +50,7 @@ end
 marg =  0.05;
 
 % Check number of arguments
+nargin  = numel(varargin);
 if nargin ~= 4,
     error('Incorrect number of arguments.');
 end
