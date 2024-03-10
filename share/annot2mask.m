@@ -11,10 +11,9 @@ function annot2mask(varargin)
 %             should be added to an initial empty mask, or removed from an
 %             initial full mask.
 % roinames  : Names or numerical indices of the regions to be
-%             included or excluded in the mask.
+%             included in or excluded from the mask.
 %
-% Before running, be sure that ${FREESURFER_HOME}/matlab is
-% in the OCTAVE/MATLAB path.
+% Before running, be sure that ${FREESURFER_HOME} is set.
 %
 % _____________________________________
 % Anderson M. Winkler
@@ -46,10 +45,9 @@ if exist('argv','builtin') && ~ exist('varargin','var')
         fprintf('            should be added to an initial empty mask, or removed from an\n');
         fprintf('            initial full mask.\n');
         fprintf('roinames  : Names or numerical indices of the regions to be\n');
-        fprintf('            included or excluded in the mask.\n');
+        fprintf('            included in or excluded from the mask.\n');
         fprintf('\n');
-        fprintf('Before running, be sure that ${FREESURFER_HOME}/matlab is\n');
-        fprintf('in the OCTAVE/MATLAB path.\n');
+        fprintf('Before running, be sure that ${FREESURFER_HOME} is set.\n');
         fprintf('\n');
         fprintf('_____________________________________\n');
         fprintf('Anderson M. Winkler\n');
@@ -90,7 +88,7 @@ elseif strcmpi(masktype,'exclude')
     mask   = true(size(lab));
     newval = false;
 else
-    error('Unknown option: %s',starting);
+    error('Unknown option: %s',masktype);
 end
 
 % For each region, replace include or exclude vertices from the mask
@@ -113,7 +111,7 @@ for r = 1:numel(roilist)
         end
     elseif isnumeric(roilist{r})
         roinum = roilist{r};
-        idx = lab == roilist{r};
+        idx = lab == roinum;
     else
         error('Unknown region: %s',roilist{r})
     end
