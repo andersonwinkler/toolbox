@@ -16,7 +16,7 @@ function [f,s,F] = gauss(siz,fwhms)
 % - F     : FFT of the filter.
 % 
 % To use this filter to smooth, use:
-% img = real(ifftn(fftn(img).*abs(F)))*s;
+% simg = real(ifftn(fftn(img).*abs(F)))*s;
 % 
 % _____________________________________
 % Anderson M. Winkler
@@ -28,15 +28,15 @@ function [f,s,F] = gauss(siz,fwhms)
 % Take and check arguments
 siz  = siz(:);
 fwhms = fwhms(:);
-if numel(siz) ~= numel(fwhms),
-    if numel(fwhms) ~= 1,
+if numel(siz) ~= numel(fwhms)
+    if numel(fwhms) ~= 1
         error('The domain size and FWHM need to have the same length');
     else
         fwhms = ones(size(siz))*fwhms;
     end
 end
 D = numel(siz);
-if D > 4;
+if D > 4
     error('Too many dimensions');
 end
 
@@ -51,28 +51,28 @@ for d = 1:D
 end
 
 % 1D
-if D >= 1,
+if D >= 1
     f = g{1};
 end
 
 % 2D
-if D >= 2,
+if D >= 2
     f = f'*g{2};
 end
 
 % 3D
-if D >= 3,
+if D >= 3
     tmp = zeros(siz(1:3)');
-    for s = 1:siz(3),
+    for s = 1:siz(3)
         tmp(:,:,s) = g{3}(s).*f;
     end
     f = tmp;
 end
 
 % 4D
-if D >= 4,
+if D >= 4
     tmp = zeros(siz(1:4)');
-    for v = 1:siz(4),
+    for v = 1:siz(4)
         tmp(:,:,:,v) = g{4}(v).*f;
     end
     f = tmp;
@@ -84,12 +84,12 @@ f = f/sum(f(:));
 % Some sanity check (if the filter is too narrow, for instance, this can
 % happen, but hard to predict depending on the dimensions, etc). So, let's
 % go with a catch-all.
-if any(isnan(f(:))),
+if any(isnan(f(:)))
     error('The input parameters are causing NaN in the filter.');
 end
 
 % Compute the scaling factor
-if nargout >= 2,
+if nargout >= 2
     
     % The restoration is based on expectations, hence no need
     % for the actual signal.
