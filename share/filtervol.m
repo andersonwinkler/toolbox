@@ -15,14 +15,14 @@ function Vf = filtervol(V,F)
 % Jul/2012
 
 % Check arguments
-if ~ all(size(V) == size(F)),
+if ~ all(size(V) == size(F))
     error('Inputs need to be of the same size.');
 end
 
 % Filter in the frequency domain
 iV = fftn(V);
 iF = fftn(F);
-Vf = ifftn(real(iV.*iF));
+Vf = real(ifftn(iV.*abs(iF)));
 
 % Restore the energy of the signal
 en = iF.*conj(iF);
