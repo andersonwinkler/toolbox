@@ -9,7 +9,7 @@ Created on Fri Mar  7 22:36:30 2025
 import argparse
 import numpy as np
 import nibabel as nib
-
+import json
 def read_obj(filein): # =======================================================
     '''
     Open and parse a Wavefront OBJ file.
@@ -71,8 +71,11 @@ def read_obj(filein): # =======================================================
     }
     return obj
 
-def write_curv(fileout,k,kd):
+def write_curv(fileout, k, kd): # =============================================
     '''
+    Write a FreeSurfer curvature file in ASCII format 
+    aka, dpv, data-per-vertex).
+    
     Parameters
     ----------
     fileout : String
@@ -85,7 +88,6 @@ def write_curv(fileout,k,kd):
     Returns
     -------
     None.
-
     '''
     nvtx = k.shape[0]
     idx = np.arange(0,nvtx)[:,None]
@@ -95,16 +97,23 @@ def write_curv(fileout,k,kd):
 
 def calc_normals(vtx, fac): # =================================================
     '''
-    Compute vertex normals for a mesh using Nelson Max's weighting method.
+    Compute vertex and face normals.
     
-    Parameters:
-    - vtx: numpy array of shape (nvtx, 3), coordinates of vertices
-    - fac: numpy array of shape (nfac, 3), vertex indices for each face
-    
-    Returns:
-    - vn : ndarray (nvtx, 3), normals per vertex
-    - fn : ndarray (nfac, 3), normals per face
+    Parameters
+    ----------
+    vtx : NumPy array with 3 columns (float).
+        Vextex coordinates.
+    fac : NumPy array with 3 columns (int).
+        Face indices.
+
+    Returns
+    -------
+    vn : NumPy array with 3 columns (float).
+        Vertex normals.
+    fn : NumPy array with 3 columns (float).
+        Face normals.
     '''
+    
     # Number of vertices and faces
     nvtx = vtx.shape[0]
     nfac = fac.shape[0]
@@ -158,16 +167,29 @@ def calc_normals(vtx, fac): # =================================================
 
 def calc_voronoi_areas(vtx, fac): # ===========================================
     '''
-    Compute the Voronoi area for each vertex of each triangular face in a mesh.
-    
-    Parameters:
-    - vtx: numpy array of shape (nvtx, 3), coordinates of vertices
-    - fac: numpy array of shape (nfac, 3), vertex indices for each face
-    
-    Returns:
-    - vorv: numpy array of shape (nvtx, 1), Voronoi areas for each vertex
-    - vorf: numpy array of shape (nfac, 3), Voronoi areas for each vertex of each face
+    Compute the Voronoi areas for each vertex and, within a face, for each
+    vertex of that face.
+
+    Parameters
+    ----------
+    vtx : NumPy array with 3 columns (float).
+        Vextex coordinates.
+    fac : NumPy array with 3 columns (int).
+        Face indices.
+
+    Returns
+    -------
+    vorv : NumPy vector (float)
+        Voronoi area per vertex.
+    vorf : NumPy array with 3 columns (float).
+        Voronoi area per vertex per face.
+    area : NumPy vector (float)
+        Area per face
+
+    Note that np.sum(vorf, axis=1) is the same as area, whereas vorv contains
+    the sum of all values in vorf for that vertex (referenced by fac).
     '''
+    
     # Number of vertices and faces
     nvtx = vtx.shape[0]
     nfac = fac.shape[0]
@@ -244,6 +266,37 @@ def calc_rot(n): # ============================================================
     return rot
 
 def calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf): # ======================
+    '''
+    Compute curvatures k1 and k2 following the algorithm proposed by
+    Rusinkiewicz (2004), as well as the corresponding directions.
+
+    Parameters
+    ----------
+    vtx : NumPy array with 3 columns (float).
+        Vextex coordinates.
+    fac : NumPy array with 3 columns (int).
+        Face indices.
+    vtxn : NumPy array with 3 columns (float).
+        Vertex normals.
+    facn : NumPy array with 3 columns (float).
+        Face normals.
+    vorv : NumPy vector (float)
+        Voronoi area per vertex.
+    vorf : NumPy array with 3 columns (float).
+        Voronoi area per vertex per face.
+
+    Returns
+    -------
+    k1 : NumPy vector (float)
+        Curvature k1.
+    k2 : NumPy vector (float)
+        Curvature k2.
+    kd1 : NumPy array with 3 columns (float).
+        Direction of curvature k1.
+    kd2 : NumPy array with 3 columns (float).
+        Direction of curvature k2.
+    '''
+    
     # Number of vertices and faces
     nvtx = vtx.shape[0]
     nfac = fac.shape[0]
@@ -271,7 +324,7 @@ def calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf): # ======================
         # Axes (uf,vf,wf) of the local face coordinate system
         uf = np.array([1,0,0])
         vf = np.array([0,1,0])
-        #wf = facn[f] @ xfmf # This must be (0,0,1), matching the face normal in the local coordinate system
+        #wf = facn[f] @ rotf # This must be (0,0,1), matching the face normal in the local coordinate system
         
         # Vertex coordinates in the local coordinate system, centered at the face barycenter
         vA = vtx[fac[f,0]] @ rotf
@@ -333,11 +386,9 @@ def calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf): # ======================
             # Reexpress IIf in terms of a plane that contains both vertex and
             # face normals, then accummulate for each of the face vertices
             # after weighting by the Voronoi area at this face
-            rotfv = rotv[:,:,fac[f,v]].T @ rotf
-            #rotfv = calc_rot(vtxn[fac[f,v]] @ rotf)
-            #IIv[:,:,fac[f,v]] += rotfv[0:2,0:2].T @ IIf @ rotfv[0:2,0:2] * vorf[f,v]
-            IIv[:,:,fac[f,v]] += rotfv[0:2,0:2] @ IIf @ rotfv[0:2,0:2].T * vorf[f,v]
-
+            rotfv = rotf.T @ rotv[:,:,fac[f,v]]
+            IIv[:,:,fac[f,v]] += rotfv[0:2,0:2].T @ IIf @ rotfv[0:2,0:2] * vorf[f,v]
+            
     # For each vertex of the mesh
     for v in range(nvtx):
         
@@ -360,7 +411,6 @@ def calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf): # ======================
         k2[v]    = kvals[idx[1]]
         kd1[v,:] = kdirs[idx[0],:]
         kd2[v,:] = kdirs[idx[1],:]
-
     return k1, k2, kd1, kd2
 
 if __name__ == "__main__":
