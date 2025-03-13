@@ -9,6 +9,7 @@ Created on Fri Mar  7 22:36:30 2025
 import argparse
 import numpy as np
 import nibabel as nib
+import time
 
 def read_obj(filein): # =======================================================
     '''
@@ -114,51 +115,46 @@ def calc_normals(vtx, fac): # =================================================
         Face normals.
     '''
     
-    # Number of vertices and faces
+    # Number of vertices
     nvtx = vtx.shape[0]
-    nfac = fac.shape[0]
-    
-    # Allocate to accumulate vertex normals
-    vn = np.zeros((nvtx, 3))
-    fn = np.zeros((nfac, 3))
-    
-    # For each face
-    for f in range(nfac):
         
-        # Vertices and edges of the current face
-        vA = vtx[fac[f,0]]
-        vB = vtx[fac[f,1]]
-        vC = vtx[fac[f,2]]
-        eA = vC - vB  # V_{i}
-        eB = vA - vC  # V_{i+1} for vA
-        eC = vB - vA  # V_{i+1} for vB when cycling back
+    # Vertices and edges of each face
+    vA = vtx[fac[:,0]]
+    vB = vtx[fac[:,1]]
+    vC = vtx[fac[:,2]]
+    eA = vC - vB  # V_{i}
+    eB = vA - vC  # V_{i+1} for vA
+    eC = vB - vA  # V_{i+1} for vB when cycling back
                 
-        # Edge lengths
-        len_eA = np.linalg.norm(eA)
-        len_eB = np.linalg.norm(eB)
-        len_eC = np.linalg.norm(eC)
+    # Edge lengths
+    len_eA = np.linalg.norm(eA, axis=1)
+    len_eB = np.linalg.norm(eB, axis=1)
+    len_eC = np.linalg.norm(eC, axis=1)
         
-        # Face normal
-        fn[f,:] = np.cross(eC, eA)
+    # Face normal
+    fn = np.cross(eC, eA)
 
-        # Angles at each vertex, clip to avoid numerical problems
-        cos_alphaA = np.clip(np.dot(eC, -eB) / (len_eC * len_eB), -1.0, 1.0)
-        cos_alphaB = np.clip(np.dot(eA, -eC) / (len_eA * len_eC), -1.0, 1.0)
-        cos_alphaC = np.clip(np.dot(eB, -eA) / (len_eB * len_eA), -1.0, 1.0)
-        alphaA     = np.arccos(cos_alphaA)
-        alphaB     = np.arccos(cos_alphaB)
-        alphaC     = np.arccos(cos_alphaC)
-        
-        # Weights -- Equation 2 of Max (1999), i.e., sin(alpha) / (|V_i| * |V_{i+1}|)
-        cA = np.sin(alphaA) / (len_eB * len_eC)
-        cB = np.sin(alphaB) / (len_eA * len_eC)
-        cC = np.sin(alphaC) / (len_eA * len_eB)
+    # Angles at each vertex, clip to avoid numerical problems
+    cos_alphaA = np.clip(np.sum(eC * -eB, axis=1) / (len_eC * len_eB), -1.0, 1.0)
+    cos_alphaB = np.clip(np.sum(eA * -eC, axis=1) / (len_eA * len_eC), -1.0, 1.0)
+    cos_alphaC = np.clip(np.sum(eB * -eA, axis=1) / (len_eB * len_eA), -1.0, 1.0)
+    sin_alphaA = np.sqrt(1 - cos_alphaA**2)
+    sin_alphaB = np.sqrt(1 - cos_alphaB**2)
+    sin_alphaC = np.sqrt(1 - cos_alphaC**2)
+    
+    # Weights -- Equation 2 of Max (1999), i.e., sin(alpha) / (|V_i| * |V_{i+1}|)
+    cA = sin_alphaA / (len_eB * len_eC)
+    cB = sin_alphaB / (len_eA * len_eC)
+    cC = sin_alphaC / (len_eA * len_eB)
 
-        # Accumulate weighted face normal contributions
-        # thus avoiding to iterate over vertices
-        vn[fac[f,0]] += cA * fn[f]
-        vn[fac[f,1]] += cB * fn[f]
-        vn[fac[f,2]] += cC * fn[f]
+    # Allocate space for vertex normals
+    vn = np.zeros((nvtx,3))
+
+    # Accumulate weighted face normal contributions
+    # thus avoiding to iterate over vertices
+    np.add.at(vn, fac[:, 0], cA[:, None] * fn)
+    np.add.at(vn, fac[:, 1], cB[:, None] * fn)
+    np.add.at(vn, fac[:, 2], cC[:, None] * fn)
 
     # Normalize normals to unit norm
     vn  /= np.linalg.norm(vn, axis=1)[:,None]
@@ -183,60 +179,50 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
         Voronoi area per vertex.
     vorf : NumPy array with 3 columns (float).
         Voronoi area per vertex per face.
-    area : NumPy vector (float)
+    areas : NumPy vector (float)
         Area per face
 
     Note that np.sum(vorf, axis=1) is the same as area, whereas vorv contains
     the sum of all values in vorf for that vertex (referenced by fac).
     '''
     
-    # Number of vertices and faces
+    # Number of vertices
     nvtx = vtx.shape[0]
-    nfac = fac.shape[0]
-    
-    # Allocate to store Voronoi areas, per vertex and per vertex of each face
-    area = np.zeros(nfac)
-    vorv = np.zeros(nvtx)
-    vorf = np.zeros((nfac, 3))
-    
-    # For each face
-    for f in range(nfac):
         
-        # Vertices and edges of the current face
-        vA = vtx[fac[f,0]]
-        vB = vtx[fac[f,1]]
-        vC = vtx[fac[f,2]]
-        eA = vC - vB  # V_{i}
-        eB = vA - vC  # V_{i+1} for vA
-        eC = vB - vA  # V_{i+1} for vB when cycling back
+    # Vertices and edges of the current face
+    vA = vtx[fac[:,0]]
+    vB = vtx[fac[:,1]]
+    vC = vtx[fac[:,2]]
+    eA = vC - vB  # V_{i}
+    eB = vA - vC  # V_{i+1} for vA
+    eC = vB - vA  # V_{i+1} for vB when cycling back
                 
-        # Edge lengths
-        len_eA = np.linalg.norm(eA)
-        len_eB = np.linalg.norm(eB)
-        len_eC = np.linalg.norm(eC)
+    # Edge lengths
+    len_eA = np.linalg.norm(eA, axis=1)
+    len_eB = np.linalg.norm(eB, axis=1)
+    len_eC = np.linalg.norm(eC, axis=1)
 
-        # Angles at each vertex, clip to avoid numerical problems
-        cos_alphaA = np.clip(np.dot(eC, -eB) / (len_eC * len_eB), -1.0, 1.0)
-        cos_alphaB = np.clip(np.dot(eA, -eC) / (len_eA * len_eC), -1.0, 1.0)
-        cos_alphaC = np.clip(np.dot(eB, -eA) / (len_eB * len_eA), -1.0, 1.0)
-        alphaA     = np.arccos(cos_alphaA)
-        alphaB     = np.arccos(cos_alphaB)
-        alphaC     = np.arccos(cos_alphaC)
+    # Angles at each vertex, clip to avoid numerical problems
+    cos_alphaA = np.clip(np.sum(eC * -eB, axis=1) / (len_eC * len_eB), -1.0, 1.0)
+    cos_alphaB = np.clip(np.sum(eA * -eC, axis=1) / (len_eA * len_eC), -1.0, 1.0)
+    cos_alphaC = np.clip(np.sum(eB * -eA, axis=1) / (len_eB * len_eA), -1.0, 1.0)
+    alphaA     = np.arccos(cos_alphaA)
+    alphaB     = np.arccos(cos_alphaB)
+    alphaC     = np.arccos(cos_alphaC)
         
-        # Area of the entire face
-        area[f] = np.linalg.norm(np.cross(eA, eB))/2
+    # Area of the entire face
+    areas = np.linalg.norm(np.cross(eA, eB, axis=1), axis=1) / 2.0
 
-        # Voronoi area for each vertex of a face
-        # Voronoi area = (angle / sum of angles) * area
-        vorA     = area[f] * alphaA / np.pi
-        vorB     = area[f] * alphaB / np.pi
-        vorC     = area[f] * alphaC / np.pi
-        vorf[f,:] = [vorA, vorB, vorC]
+    # Voronoi area for each vertex of a face
+    # Voronoi area = area * (angle / sum of angles)
+    vorf = areas[:, None] * np.vstack((alphaA, alphaB, alphaC)).T / np.pi 
         
-        # Accumulate vertex Voronoi areas for faces that meet at that vertex
-        for v in range(3):
-            vorv[fac[f,v]] += vorf[f,v]
-    return vorv, vorf, area
+    # Accumulate vertex Voronoi areas for faces that meet at that vertex
+    vorv = np.zeros(nvtx)
+    np.add.at(vorv, fac[:,0], vorf[:,0])
+    np.add.at(vorv, fac[:,1], vorf[:,1])
+    np.add.at(vorv, fac[:,2], vorf[:,2])
+    return vorv, vorf, areas
 
 def calc_area_volume(vtx, fac): # =============================================
     '''
@@ -536,11 +522,11 @@ if __name__ == "__main__":
     # Compute vertex normals
     print('Computing face and vertex normals using the Max (1999) algorithm')
     vtxn, facn = calc_normals(vtx, fac)
-    
+        
     # Compute Voronoi areas
     print('Computing Voronoi areas per vertex at each face')
-    vorv, vorf, area = calc_voronoi_areas(vtx, fac)
-    
+    vorv, vorf, areas = calc_voronoi_areas(vtx, fac)
+
     # Compute principal curvatures
     print('Computing principal curvatures using the Rusinkiewicz (2004) algorithm')
     curvs = calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf)
