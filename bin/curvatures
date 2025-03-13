@@ -238,6 +238,40 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
             vorv[fac[f,v]] += vorf[f,v]
     return vorv, vorf, area
 
+def calc_area_volume(vtx, fac): # =============================================
+    '''
+    Compute area and volume for the mesh.
+
+    Parameters
+    ----------
+    vtx : NumPy array with 3 columns (float).
+        Vextex coordinates.
+    fac : NumPy array with 3 columns (int).
+        Face indices.
+
+    Returns
+    -------
+    area : float
+        Total surface area of the mesh.
+    volume : float
+        Total volume within the mesh.
+    '''
+    # Vertex coordinates and two edges
+    vA = vtx[fac[:,0]]
+    vB = vtx[fac[:,1]]
+    vC = vtx[fac[:,2]]
+    eA = vC - vB  # V_{i}
+    eB = vA - vC  # V_{i+1} for vA
+
+    # Area
+    areas = np.linalg.norm(np.cross(eA, eB), axis=1) / 2.0 
+    area  = np.sum(areas)
+    
+    # Volume
+    volume = np.sum(np.sum(vA * np.cross(vB, vC), axis=1)) / 6.0
+    
+    return area, volume
+
 def calc_rot(n): # ============================================================
     '''
     Compute a 3x3 rotation matrix that changes the coordinate system such
@@ -245,7 +279,7 @@ def calc_rot(n): # ============================================================
 
     Parameters
     ----------
-    n : Input vector, already with norm = 1
+    n : Input vector
 
     Returns
     -------
@@ -285,7 +319,7 @@ def calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf): # ======================
     vorf : NumPy array with 3 columns (float).
         Voronoi area per vertex per face.
 
-    Returns
+    Returns (as a dictionary)
     -------
     k1 : NumPy vector (float)
         Curvature k1.
