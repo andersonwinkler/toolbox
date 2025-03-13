@@ -487,11 +487,11 @@ def calc_composites(curvs): # ================================================
     
     # Area Fraction of Intrinsic Curvature Index
     curvs['FICI']  = (curvs['K'] > 0).astype(float)
-    curvs['FNICI'] = (curvs['K'] > 0).astype(float)
+    curvs['FNICI'] = (curvs['K'] < 0).astype(float)
     
     # Area Fraction of Mean Curvature Index
     curvs['FMCI']  = (curvs['H'] > 0).astype(float)
-    curvs['FNMCI'] = (curvs['H'] > 0).astype(float)
+    curvs['FNMCI'] = (curvs['H'] < 0).astype(float)
     
     # SH2SH and SK2SK
     curvs['SK2SK'] = curvs['GLN'] / curvs['AICI']
