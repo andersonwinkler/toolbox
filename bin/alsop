@@ -120,7 +120,6 @@ ${FSLDIR}/bin/fslsplit ${TMPDIR}/lc_topup ${TMPDIR}/vol_ -t
 echo "Computing perfusion maps"
 nvols=$(${FSLDIR}/bin/fslnvols ${TMPDIR}/lc)
 npairs=$(echo "scale=0; ${nvols} / 2" | bc)
-echo $nvols $npairs
 i=0
 CBFLIST=""
 for ((p=0;p<${npairs};p++)) ; do
