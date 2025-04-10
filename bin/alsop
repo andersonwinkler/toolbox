@@ -1,54 +1,74 @@
 #!/bin/bash
 
+# Constants from the Alsop et al (2015) paper
+sixK=6000
+lambda=0.9
+T1blood=1650
+alpha=0.85
+
 if [ -z "$1" ]; then
 cat <<EOU
 Compute CBF maps from pCASL images using the formulas from Alsop et al. (2015).
 
-Usage: alsop -i pcasl_4d -c aslcontext.tsv -b M0_pe_reversed -o outdir
+Usage: alsop -i <pCASL 4D> -c <asl context tsv> -b <M0_pe_reversed> \
+             -e <echo spacing> -f <EPI factor> -o <outdir>
 
 -i : Input 4D file. First volume is M0, followed by pairs label then control.
 -c : BIDS ASL context file, with columns for LD and PLD.
 -b : Phase-encoding reversed acquisition. First volume is M0, the others are ignored.
+-d : Phase encoding direction (x, y, or z; sign is not necessary).
+-e : Effective echo spacing, in ms, used by topup. If missing, topup won't be used.
+-f : EPI factor, used by topup. If missing, topup won't be used.
 -o : Output directory.
 
-EPI Factor and Echo Spacing are hard coded inside the script.
-Phase encoding direction is assumed along the +y/-y direction. To change to x or z, edit inside.
+Example:
+alsop -i BIDS/rawdata/sub-01/ses-2/perf/sub-01_ses-2_dir-PA_asl.nii.gz \
+      -c BIDS/rawdata/sub-01/ses-2/perf/sub-01_ses-2_dir-PA_aslcontext.tsv \
+      -b BIDS/rawdata/sub-01/ses-2/perf/sub-01_ses-2_dir-AP_asl.nii.gz \
+      -d y  -e 0.54  -f 37 \
+      -o BIDS/derivatives/alsop/sub-01/ses-2/alsop
 _____________________________________
 Anderson M. Winkler
 The University of Texas Rio Grande Valley
 Apr/2025
-http://brainder.org
+https://brainder.org
 EOU
 exit 1
 fi
 
-while getopts ":i:o:c:b:" OPTIONS; do
+while getopts "i:c:b:d:e:f:o:" OPTIONS; do
   case ${OPTIONS} in
     i) ASLIN=${OPTARG} ;;
-    o) OUTDIR=${OPTARG} ;;
     c) CONTEXT=${OPTARG} ;;
     b) BLIP=${OPTARG} ;;
+    d) PEDIR=${OPTARG} ;;
+    e) ECHOSPACING=${OPTARG} ;;
+    f) EPIFACTOR=${OPTARG} ;;
+    o) OUTDIR=${OPTARG} ;;
     \?) echo "Invalid option: -${OPTARG}"; exit 1;;
     :) echo "Option -${OPTARG} requires an argument"; exit 1;;
   esac
 done
 
-# Parameters from our sequence
-EPIFactor=37
-EchoSpacing=0.54 # in ms
+# Some arguments needed for topup
+if [[ -z "${EPIFACTOR}" ]] || [[ -z "${ECHOSPACING}" ]]; then
+   echo "No distortion correction with be applied because EPI factor or echo spacing were not provided."
+   TOPUP=false
+else
+   echo "Distortion correction with topup will use:"
+   echo "- Echo spacing: ${ECHOSPACING}"
+   echo "- EPI factor: ${EPIFACTOR}"
+   TOPUP=true
+fi
 
 # Arrays with labeling durations and post-labeling delays
 LD=($( awk 'NR>1 {printf "%s ", $2}' ${CONTEXT}))
 PLD=($(awk 'NR>1 {printf "%s ", $3}' ${CONTEXT}))
 
-# Constants from the Alsop et al (2015) paper
-lambda=0.9
-T1blood=1650
-alpha=0.85
-
+# Temporary directory
 TMPDIR=${OUTDIR}/temp_$(printf "%04x" ${RANDOM})
 mkdir -p ${TMPDIR}
-#: <<EOX
+
 # Break M0 from the pairs label/control
 echo "Reorganizing M0 and label-control pairs"
 ${FSLDIR}/bin/fslroi ${BLIP}  ${TMPDIR}/m0_blip 0 1
@@ -58,11 +78,25 @@ ${FSLDIR}/bin/fslmerge -t ${TMPDIR}/m0_both ${TMPDIR}/m0 ${TMPDIR}/m0_blip
 
 # Topup
 echo "Running topup"
-DwellTime=$(dc -e "10 k ${EPIFactor} ${EchoSpacing} * 1000 / p")
-cat <<EOF > ${TMPDIR}/topup_params.txt
+DwellTime=$(echo "scale=10; ${EPIFACTOR} * ${ECHOSPACING} / 1000" | bc)
+case ${PEDIR: -1} in
+   "x") cat <<EOF > ${TMPDIR}/topup_params.txt
+1 0 0 ${DwellTime}
+-1 0 0 ${DwellTime}
+EOF
+   ;;
+   "y") cat <<EOF > ${TMPDIR}/topup_params.txt
 0 1 0 ${DwellTime}
 0 -1 0 ${DwellTime}
 EOF
+   ;;
+   "z") cat <<EOF > ${TMPDIR}/topup_params.txt
+0 0 1 ${DwellTime}
+0 0 -1 ${DwellTime}
+EOF
+   ;;
+   *) echo "Unknown phase encoding direction ${PEDIR: -1}."
+esac
 ${FSLDIR}/bin/topup --imain=${TMPDIR}/m0_both \
                     --datain=${TMPDIR}/topup_params.txt \
                     --config=b02b0.cnf \
@@ -82,11 +116,10 @@ ${FSLDIR}/bin/applytopup --imain=${TMPDIR}/lc \
 
 echo "Splitting label-control timeseries into individual volumes"
 ${FSLDIR}/bin/fslsplit ${TMPDIR}/lc_topup ${TMPDIR}/vol_ -t
-#EOX
 
 echo "Computing perfusion maps"
 nvols=$(${FSLDIR}/bin/fslnvols ${TMPDIR}/lc)
-npairs=$(dc -e "${nvols} 2 / p")
+npairs=$(echo "scale=0; ${nvols} / 2" | bc)
 echo $nvols $npairs
 i=0
 CBFLIST=""
@@ -95,7 +128,7 @@ for ((p=0;p<${npairs};p++)) ; do
    lab=$(printf "%04d" ${i})
    con=$(printf "%04d" $((i+1)))
    pair=$(printf "%04d" $((p+1)))
-   ctenum=$(echo "scale=10; e(${PLD[p]}/${T1blood}) * ${lambda} * 6000" | bc -l)
+   ctenum=$(echo "scale=10; e(${PLD[p]}/${T1blood}) * ${lambda} * ${sixK}" | bc -l)
    cteden=$(echo "scale=10; (1 - e(-${LD[p]}/${T1blood})) * ${alpha} * 2" | bc -l)
    ${FSLDIR}/bin/fslmaths ${TMPDIR}/vol_${con} -sub ${TMPDIR}/vol_${lab} -div ${TMPDIR}/m0_topup -mul ${ctenum} -div ${cteden} ${TMPDIR}/cbf_${pair}
    CBFLIST="${CBFLIST} ${TMPDIR}/cbf_${pair}"
