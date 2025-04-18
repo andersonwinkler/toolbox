@@ -99,6 +99,7 @@ def write_curv(fileout, k, kd): # =============================================
 def calc_normals(vtx, fac): # =================================================
     '''
     Compute vertex and face normals.
+    Vertex normals use the Max et al. (1999) algorithm.
     
     Parameters
     ----------
@@ -119,13 +120,11 @@ def calc_normals(vtx, fac): # =================================================
     nvtx = vtx.shape[0]
         
     # Vertices and edges of each face
-    vA = vtx[fac[:,0]]
-    vB = vtx[fac[:,1]]
-    vC = vtx[fac[:,2]]
-    eA = vC - vB  # V_{i}
-    eB = vA - vC  # V_{i+1} for vA
-    eC = vB - vA  # V_{i+1} for vB when cycling back
-                
+    tri = vtx[fac]
+    eA = tri[:,2,:] - tri[:,1,:] # edge opposite to A
+    eB = tri[:,0,:] - tri[:,2,:] # edge opposite to B
+    eC = tri[:,1,:] - tri[:,0,:] # edge opposite to C
+
     # Edge lengths
     len_eA = np.linalg.norm(eA, axis=1)
     len_eB = np.linalg.norm(eB, axis=1)
@@ -135,6 +134,8 @@ def calc_normals(vtx, fac): # =================================================
     fn = np.cross(eC, eA)
 
     # Angles at each vertex, clip to avoid numerical problems
+    # Sign is reversed for the 2nd edge in each product to account the cyclical
+    # computation of the edges (as opposed to centered at each of the angles)
     cos_alphaA = np.clip(np.sum(eC * -eB, axis=1) / (len_eC * len_eB), -1.0, 1.0)
     cos_alphaB = np.clip(np.sum(eA * -eC, axis=1) / (len_eA * len_eC), -1.0, 1.0)
     cos_alphaC = np.clip(np.sum(eB * -eA, axis=1) / (len_eB * len_eA), -1.0, 1.0)
@@ -152,14 +153,52 @@ def calc_normals(vtx, fac): # =================================================
 
     # Accumulate weighted face normal contributions
     # thus avoiding to iterate over vertices
-    np.add.at(vn, fac[:, 0], cA[:, None] * fn)
-    np.add.at(vn, fac[:, 1], cB[:, None] * fn)
-    np.add.at(vn, fac[:, 2], cC[:, None] * fn)
+    np.add.at(vn, fac[:,0], cA[:,None] * fn)
+    np.add.at(vn, fac[:,1], cB[:,None] * fn)
+    np.add.at(vn, fac[:,2], cC[:,None] * fn)
 
-    # Normalize normals to unit norm
+    # Normalize normals to unit.
+    # You may opt to comment out to take into account transitions
+    # e.g., from positive to negative.
     vn  /= np.linalg.norm(vn, axis=1)[:,None]
     fn  /= np.linalg.norm(fn, axis=1)[:,None]
     return vn, fn
+
+def signed_area(tri, rfn=None): # =============================================
+    '''
+    Compute the signed area of a triangle in relation to a reference normal.
+    If the normals are parallel, area is positive; if antiparallel, negative.
+    This is an auxiliary function for the computation of the Voronoi areas.
+
+    Parameters
+    ----------
+    tri : NumPy array, num faces by 3 by 3
+        Array of vertex coordinates of each face.
+        First dimension has the face indices (0..numfaces)
+        Second dimension has the vertices ABC
+        Third dimension has the coordinates (x,y,z)
+    rfn : NumPy array, optional
+        Reference normal for each face in tri. The default is None.
+
+    Returns
+    -------
+    area : NumPy array num faces by 1
+        Signed area of each face
+    fn : NumPy array num faces by 3
+        Face normals (x,y,z).
+    '''
+    # This repeats some code from other functions (for normals and for area)
+    # but is done here for speed.
+    eA   = tri[:,2,:] - tri[:,1,:] # edge opposite to A
+    eC   = tri[:,1,:] - tri[:,0,:] # edge opposite to C
+    fn   = np.cross(eC, eA, axis=1)
+    area = np.linalg.norm(fn, axis=1) / 2.0
+    idx  = area != 0
+    fn[idx,:] /= np.linalg.norm(fn[idx,:], axis=1)[:,None]
+    if rfn is not None:
+        sgn   = np.sign(np.sum(fn * rfn, axis=1))
+        area *= sgn
+    return area[:,None], fn
 
 def calc_voronoi_areas(vtx, fac): # ===========================================
     '''
@@ -184,6 +223,88 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
 
     Note that np.sum(vorf, axis=1) is the same as area, whereas vorv contains
     the sum of all values in vorf for that vertex (referenced by fac).
+    '''
+    
+    # Number of vertices
+    nvtx = vtx.shape[0]
+    
+    # Vertex coordinates of each original triangular face
+    triABC = vtx[fac] # dim0: face indices; dim1: vertices ABC; dim2: (x,y,z) coords.
+    
+    # Area and reference normal of the main (original) triangle ABC
+    areaABC, fnABC = signed_area(triABC)
+    
+    # Vertex coordinates of the midpoints of the edges abc, opposite to
+    # the vertices ABC, respectively.
+    # These don't form useful triangles themselves but will be used later
+    triabc = (triABC[:,[1,2,0],:] + triABC[:,[2,0,1],:])/2.0
+    
+    # Vertex coordinates of circumcenter
+    eA   = triABC[:,1,:] - triABC[:,2,:] # edge opposite to A, centered at C
+    eB   = triABC[:,0,:] - triABC[:,2,:] # edge opposite to B, centered at C
+    Pnum = np.cross( ( np.linalg.norm(eA, axis=1, keepdims=True)**2*eB - 
+                       np.linalg.norm(eB, axis=1, keepdims=True)**2*eA ),
+                     np.cross(eA,eB) )
+    Pden = 2*np.linalg.norm(np.cross(eA,eB), axis=1, keepdims=True)**2
+    P    = Pnum / Pden + triABC[:,2,:]
+    P    = P[:,None,:]
+    
+    # Voronoi subtriangles (two per Voronoi area)
+    tri = {}
+    # For vertex A, these are AcP and APb
+    tri['AcP'] = np.concatenate((triABC[:,0,None,:], triabc[:,2,None,:], P), axis=1)
+    tri['APb'] = np.concatenate((triABC[:,0,None,:], P, triabc[:,1,None,:]), axis=1)
+    
+    # For vertex B, these are BaP and BPc
+    tri['BaP'] = np.concatenate((triABC[:,1,None,:], triabc[:,0,None,:], P), axis=1)
+    tri['BPc'] = np.concatenate((triABC[:,1,None,:], P, triabc[:,2,None,:]), axis=1)
+    
+    # For vertex C, these are CbP and CPa
+    tri['CbP'] = np.concatenate((triABC[:,2,None,:], triabc[:,1,None,:], P), axis=1)
+    tri['CPa'] = np.concatenate((triABC[:,2,None,:], P, triabc[:,0,None,:]), axis=1)
+    
+    # Compute the signed areas of each subtriangle; sign is in relation
+    # to the reference normal, i.e., the normal of the main triangle ABC.
+    area = {}
+    for key in tri:
+        area[key] = signed_area(tri[key], fnABC)[0]
+    
+    # Voronoi area for each vertex of each face
+    vorf = np.concatenate((
+        area['AcP'] + area['APb'],
+        area['BaP'] + area['BPc'],
+        area['CbP'] + area['CPa']), axis=1)
+    
+    # Accumulate vertex Voronoi areas for faces that meet at that vertex
+    vorv = np.zeros(nvtx)
+    np.add.at(vorv, fac[:,0], vorf[:,0])
+    np.add.at(vorv, fac[:,1], vorf[:,1])
+    np.add.at(vorv, fac[:,2], vorf[:,2])
+    return vorv, vorf, areaABC
+
+def calc_angular_areas(vtx, fac): # ===========================================
+    '''
+    Compute the angular areas for each vertex and, within a face, for each
+    vertex of that face. This function is currently unused.
+
+    Parameters
+    ----------
+    vtx : NumPy array with 3 columns (float).
+        Vextex coordinates.
+    fac : NumPy array with 3 columns (int).
+        Face indices.
+
+    Returns
+    -------
+    angv : NumPy vector (float)
+        Angular area per vertex.
+    angf : NumPy array with 3 columns (float).
+        Angular area per vertex per face.
+    areas : NumPy vector (float)
+        Area per face
+
+    Note that np.sum(angf, axis=1) is the same as area, whereas angv contains
+    the sum of all values in angf for that vertex (referenced by fac).
     '''
     
     # Number of vertices
@@ -213,16 +334,16 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     # Area of the entire face
     areas = np.linalg.norm(np.cross(eA, eB, axis=1), axis=1) / 2.0
 
-    # Voronoi area for each vertex of a face
-    # Voronoi area = area * (angle / sum of angles)
-    vorf = areas[:, None] * np.vstack((alphaA, alphaB, alphaC)).T / np.pi 
+    # Angular area for each vertex of a face
+    # Angular area = area * (angle / sum of angles)
+    angf = areas[:, None] * np.vstack((alphaA, alphaB, alphaC)).T / np.pi 
         
     # Accumulate vertex Voronoi areas for faces that meet at that vertex
-    vorv = np.zeros(nvtx)
-    np.add.at(vorv, fac[:,0], vorf[:,0])
-    np.add.at(vorv, fac[:,1], vorf[:,1])
-    np.add.at(vorv, fac[:,2], vorf[:,2])
-    return vorv, vorf, areas
+    angv = np.zeros(nvtx)
+    np.add.at(angv, fac[:,0], angf[:,0])
+    np.add.at(angv, fac[:,1], angf[:,1])
+    np.add.at(angv, fac[:,2], angf[:,2])
+    return angv, angf, areas
 
 def calc_area_volume(vtx, fac): # =============================================
     '''
@@ -253,7 +374,7 @@ def calc_area_volume(vtx, fac): # =============================================
     areas = np.linalg.norm(np.cross(eA, eB), axis=1) / 2.0 
     area  = np.sum(areas)
     
-    # Volume
+    # Volume (sum of signed volumes in relation to a point in the center)
     volume = np.sum(np.sum(vA * np.cross(vB, vC), axis=1)) / 6.0
     
     return area, volume
