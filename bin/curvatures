@@ -9,7 +9,6 @@ Created on Fri Mar  7 22:36:30 2025
 import argparse
 import numpy as np
 import nibabel as nib
-import time
 
 def read_obj(filein): # =======================================================
     '''
@@ -337,24 +336,24 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     # If the circumcenter P is outside edge c (segment AB)
     idx = area['ABP'][:,0] < 0
     if idx.any():
-        m[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,1,:], P[idx,0,:])[0] # intersection AB x bP
-        n[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,0,:], P[idx,0,:])[0] # intersection AB x aP
+        m[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,1,:], P[idx,0,:])[0][:,None,:] # intersection AB x bP
+        n[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,0,:], P[idx,0,:])[0][:,None,:] # intersection AB x aP
         tri['AmP'][idx,:,:] = np.concatenate((triABC[idx,0,None,:], m[idx,:,:], P[idx,:,:]), axis=1)
         tri['BPn'][idx,:,:] = np.concatenate((triABC[idx,1,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
     
     # If the circumcenter P is outside edge b (segment CA)
     idx = area['APC'][:,0] < 0
     if idx.any():
-        m[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,0,:], P[idx,0,:])[0] # intersection CA x aP
-        n[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,2,:], P[idx,0,:])[0] # intersection CA x cP
+        m[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,0,:], P[idx,0,:])[0][:,None,:] # intersection CA x aP
+        n[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,2,:], P[idx,0,:])[0][:,None,:] # intersection CA x cP
         tri['CmP'][idx,:,:] = np.concatenate((triABC[idx,2,None,:], m[idx,:,:], P[idx,:,:]), axis=1)
         tri['APn'][idx,:,:] = np.concatenate((triABC[idx,0,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
     
     # If the circumcenter P is outside edge a (segment BC)
     idx = area['PBC'][:,0] < 0
     if idx.any():
-        m[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,2,:], P[idx,0,:])[0] # intersection BC x cP
-        n[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,1,:], P[idx,0,:])[0] # intersection BC x bP
+        m[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,2,:], P[idx,0,:])[0][:,None,:] # intersection BC x cP
+        n[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,1,:], P[idx,0,:])[0][:,None,:] # intersection BC x bP
         tri['BmP'][idx,:,:] = np.concatenate((triABC[idx,1,None,:], m[idx,:,:], P[idx,:,:]), axis=1)
         tri['CPn'][idx,:,:] = np.concatenate((triABC[idx,2,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
     
@@ -750,16 +749,29 @@ def calc_composites(curvs): # ================================================
     
     return curvs
 
+# Improve help output (customize argparse)
+class BetterFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    def add_usage(self, usage, actions, groups, prefix=None):
+        if prefix is None:
+            prefix = "Usage: "
+        super().add_usage(usage, actions, groups, prefix)
+    def start_section(self, heading):
+        heading = heading.capitalize()
+        super().start_section(heading)
+
 if __name__ == "__main__":
 
     # Argument parsing
-    parser = argparse.ArgumentParser(description="Compute curvatures from a Wavefront OBJ file.")
+    parser = argparse.ArgumentParser(
+        description = 'Compute curvatures from a Wavefront OBJ or FreeSurfer surface file.',
+        epilog      = 'Anderson Winkler (UTRGV) - April/2025',
+        formatter_class = BetterFormatter)
     parser.add_argument('--in',  dest='input',     required=True, help="Input Wavefront OBJ file")
     parser.add_argument('--it',  dest='intype',    default=None,  help="Input type (file format)")
     parser.add_argument('--ot',  dest='outtype',   default=None,  help="Output type (file format)")
     parser.add_argument('--out', dest='outprefix', required=True, help="Prefix for output curvature files")
     args = parser.parse_args()
-    
+
     # Read Wavefront OBJ
     print('Reading input file: {}'.format(args.input))
     surfs = ('surf', 'pial', 'white', 'inflated', 'sphere', 'sphere.reg', 'orig')
@@ -775,7 +787,7 @@ if __name__ == "__main__":
     vtxn, facn = calc_normals(vtx, fac)
         
     # Compute Voronoi areas
-    print('Computing Voronoi areas per vertex at each face')
+    print('Computing Voronoi areas per vertex at each face using an inhouse algorithm')
     vorv, vorf, areas = calc_voronoi_areas(vtx, fac)
 
     # Compute principal curvatures
