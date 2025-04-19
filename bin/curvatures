@@ -186,9 +186,8 @@ def signed_area(tri, rfn=None): # =============================================
         Signed area of each face
     fn : NumPy array num faces by 3
         Face normals (x,y,z).
+
     '''
-    # This repeats some code from other functions (for normals and for area)
-    # but is done here for speed.
     eA   = tri[:,2,:] - tri[:,1,:] # edge opposite to A
     eC   = tri[:,1,:] - tri[:,0,:] # edge opposite to C
     fn   = np.cross(eC, eA, axis=1)
@@ -199,6 +198,54 @@ def signed_area(tri, rfn=None): # =============================================
         sgn   = np.sign(np.sum(fn * rfn, axis=1))
         area *= sgn
     return area[:,None], fn
+
+def line_intersection(A,B,C,D): # =============================================
+    '''
+    Compute the coordinates of the intersection between line segments AB and CD.
+    Returns also parameters s and t. If these are between 0 and 1, the intersection
+    is, respectively, within AB and CD.
+    Implementation based on:
+        * Vince J. Foundation Mathematics for Computer Science.
+          4th ed. Springer, 2024. Chapter 20, pp 417-419.
+
+    Parameters
+    ----------
+    A : NumPy array (N by 3)
+        Cartesian coordinates of point A.
+    B : NumPy array (N by 3)
+        Cartesian coordinates of point B.
+    C : NumPy array (N by 3)
+        Cartesian coordinates of point C.
+    D : NumPy array (N by 3)
+        Cartesian coordinates of point D.
+
+    Returns
+    -------
+    P : NumPy array (N by 3)
+        Cartesian coordinates of intersection point P.
+    '''
+    # Find the parameters s and t via least squares. This avoids having to figure
+    # out if there are dependent equations
+    N    = A.shape[0]
+    dat  = np.concatenate((A[:,0]-C[:,0],A[:,1]-C[:,1],A[:,2]-C[:,2])).reshape((N,3), order='F')
+    scol = np.concatenate((D[:,0]-C[:,0],D[:,1]-C[:,1],D[:,2]-C[:,2])).reshape((N,3), order='F')
+    tcol = np.concatenate((A[:,0]-B[:,0],A[:,1]-B[:,1],A[:,2]-B[:,2])).reshape((N,3), order='F')
+    des  = np.concatenate((scol[:,:,None], tcol[:,:,None]), axis=2)
+    st   = np.zeros((N,2)) # for the terms s and t of the parameterization
+    rnk  = np.zeros((N))
+    for p in range(A.shape[0]):
+        st[p], _, rnk[p], _ = np.linalg.lstsq(des[p,:,:], dat[p,:], rcond=None)
+    
+    # Mark parallel lines with None
+    st[rnk < 2] = None
+    
+    # Intersection point
+    # It can be computed using A, B and t, or using C, D, and s
+    # Results should be the same
+    #Pt = A + st[:,1,None]*(B-A)
+    #Ps = C + st[:,0,None]*(D-C)
+    P   = C + st[:,0,None]*(D-C)
+    return P, st[:,0], st[:,1]
 
 def calc_voronoi_areas(vtx, fac): # ===========================================
     '''
@@ -225,18 +272,16 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     the sum of all values in vorf for that vertex (referenced by fac).
     '''
     
-    # Number of vertices
+    # Number of vertices and faces
     nvtx = vtx.shape[0]
+    nfac = fac.shape[0]
     
     # Vertex coordinates of each original triangular face
     triABC = vtx[fac] # dim0: face indices; dim1: vertices ABC; dim2: (x,y,z) coords.
     
-    # Area and reference normal of the main (original) triangle ABC
-    areaABC, fnABC = signed_area(triABC)
-    
     # Vertex coordinates of the midpoints of the edges abc, opposite to
     # the vertices ABC, respectively.
-    # These don't form useful triangles themselves but will be used later
+    # These don't form useful triangles themselves but will be used a lot later
     triabc = (triABC[:,[1,2,0],:] + triABC[:,[2,0,1],:])/2.0
     
     # Vertex coordinates of circumcenter
@@ -263,13 +308,98 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     tri['CbP'] = np.concatenate((triABC[:,2,None,:], triabc[:,1,None,:], P), axis=1)
     tri['CPa'] = np.concatenate((triABC[:,2,None,:], P, triabc[:,0,None,:]), axis=1)
     
-    # Compute the signed areas of each subtriangle; sign is in relation
+    # Area and reference normal of the main (original) triangle ABC
+    areaABC, fnABC = signed_area(triABC)
+    
+    # Compute the signed areas of each Vornoi subtriangle; sign is in relation
     # to the reference normal, i.e., the normal of the main triangle ABC.
     area = {}
     for key in tri:
         area[key] = signed_area(tri[key], fnABC)[0]
     
-    # Voronoi area for each vertex of each face
+    # When there are negative areas, the triangles are obtuse, and simply adding
+    # the signed areas of the Voronoi subtriangles still doesn't give the correct
+    # result, i.e., the Voronoi area of the obtuse vertex ends up overestimated,
+    # whereas the Voronoi areas of the two acute vertices end up underestimated.
+    # Here we compute the areas of the respective subtriangles to test where they
+    # are negative, the correct the under/overestimation. All areas are signed
+    # Initialize variables for later
+    for key in ['BmP','CPn','CmP','APn','AmP','BPn']:
+        tri[key] = np.full((nfac,3,3), 0.0)
+    m = np.full(P.shape, 0.0)
+    n = np.full(P.shape, 0.0)
+    
+    # Areas of auxiliary subtriangles; we could do without them but they make the code clearer
+    area['ABP'] = area['AcP'] + area['BPc']
+    area['APC'] = area['CbP'] + area['APb']
+    area['PBC'] = area['BaP'] + area['CPa']
+    
+    # If the circumcenter P is outside edge c (segment AB)
+    idx = area['ABP'][:,0] < 0
+    if idx.any():
+        m[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,1,:], P[idx,0,:])[0] # intersection AB x bP
+        n[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,0,:], P[idx,0,:])[0] # intersection AB x aP
+        tri['AmP'][idx,:,:] = np.concatenate((triABC[idx,0,None,:], m[idx,:,:], P[idx,:,:]), axis=1)
+        tri['BPn'][idx,:,:] = np.concatenate((triABC[idx,1,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
+    
+    # If the circumcenter P is outside edge b (segment CA)
+    idx = area['APC'][:,0] < 0
+    if idx.any():
+        m[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,0,:], P[idx,0,:])[0] # intersection CA x aP
+        n[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,2,:], P[idx,0,:])[0] # intersection CA x cP
+        tri['CmP'][idx,:,:] = np.concatenate((triABC[idx,2,None,:], m[idx,:,:], P[idx,:,:]), axis=1)
+        tri['APn'][idx,:,:] = np.concatenate((triABC[idx,0,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
+    
+    # If the circumcenter P is outside edge a (segment BC)
+    idx = area['PBC'][:,0] < 0
+    if idx.any():
+        m[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,2,:], P[idx,0,:])[0] # intersection BC x cP
+        n[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,1,:], P[idx,0,:])[0] # intersection BC x bP
+        tri['BmP'][idx,:,:] = np.concatenate((triABC[idx,1,None,:], m[idx,:,:], P[idx,:,:]), axis=1)
+        tri['CPn'][idx,:,:] = np.concatenate((triABC[idx,2,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
+    
+    # Compute the areas for these subtriangles.
+    # We could compute just for the relevant triangles but this computation is fast
+    # anyway even for large meshes, so let's keep the code cleaner and clearer
+    for key in ['BmP','CPn','CmP','APn','AmP','BPn']:
+        area[key] = signed_area(tri[key], fnABC)[0]
+    
+    # These are the excesses or shortages, to be added or subtracted later.
+    # Note that the area is always signed.
+    area['Pmc'] = area['AcP'] - area['AmP']
+    area['Pmb'] = area['CbP'] - area['CmP']
+    area['Pma'] = area['BaP'] - area['BmP']
+    area['Pan'] = area['CPa'] - area['CPn']
+    area['Pbn'] = area['APb'] - area['APn']
+    area['Pcn'] = area['BPc'] - area['BPn']
+    
+    # Now apply the correction where needed. Recall the areas are always signed.
+    # If the circumcenter P is outside edge c (segment AB)
+    idx = area['ABP'][:,0] < 0
+    if idx.any():
+        area['AcP'][idx] -= area['Pmc'][idx]
+        area['BPc'][idx] -= area['Pcn'][idx]
+        area['CbP'][idx] += area['Pmc'][idx] # This isn't accurate but will be correct when added to area['CPa']
+        area['CPa'][idx] += area['Pcn'][idx] # This isn't accurate but will be correct when added to area['CbP']
+        
+    # If the circumcenter P is outside edge b (segment CA)
+    idx = area['APC'][:,0] < 0
+    if idx.any():
+        area['CbP'][idx] -= area['Pmb'][idx]
+        area['APb'][idx] -= area['Pbn'][idx]
+        area['BaP'][idx] += area['Pmb'][idx] # This isn't accurate but will be correct when added to area['BPc']
+        area['BPc'][idx] += area['Pbn'][idx] # This isn't accurate but will be correct when added to area['BaP']
+    
+    # If the circumcenter P is outside edge a (segment BC)
+    idx = area['PBC'][:,0] < 0
+    if idx.any():
+        area['BaP'][idx] -= area['Pma'][idx]
+        area['CPa'][idx] -= area['Pan'][idx]
+        area['AcP'][idx] += area['Pma'][idx] # This isn't accurate but will be correct when added to area['APb']
+        area['APb'][idx] += area['Pan'][idx] # This isn't accurate but will be correct when added to area['AcP']
+    
+    # Voronoi area for each vertex of each face.
+    # Again, recall the areas are always signed.
     vorf = np.concatenate((
         area['AcP'] + area['APb'],
         area['BaP'] + area['BPc'],
