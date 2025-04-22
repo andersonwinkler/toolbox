@@ -118,40 +118,22 @@ def calc_normals(vtx, fac): # =================================================
     # Number of vertices
     nvtx = vtx.shape[0]
         
-    # Vertices and edges of each face
-    tri = vtx[fac]
-    eA = tri[:,2,:] - tri[:,1,:] # edge opposite to A
-    eB = tri[:,0,:] - tri[:,2,:] # edge opposite to B
-    eC = tri[:,1,:] - tri[:,0,:] # edge opposite to C
+    # Vertices and edges of each face, their lengths
+    tri     = vtx[fac]
+    edges   = tri[:,[2,0,1],:] - tri[:,[1,2,0],:] # a=C-B, b=A-C, c=B-A
+    lengths = np.linalg.norm(edges, axis=2)
 
-    # Edge lengths
-    len_eA = np.linalg.norm(eA, axis=1)
-    len_eB = np.linalg.norm(eB, axis=1)
-    len_eC = np.linalg.norm(eC, axis=1)
-        
     # Face normal
-    fn = np.cross(eC, eA)
+    area, fn = signed_area(tri)
 
-    # Angles at each vertex, clip to avoid numerical problems
-    # Sign is reversed for the 2nd edge in each product to account the cyclical
-    # computation of the edges (as opposed to centered at each of the angles)
-    cos_alphaA = np.clip(np.sum(eC * -eB, axis=1) / (len_eC * len_eB), -1.0, 1.0)
-    cos_alphaB = np.clip(np.sum(eA * -eC, axis=1) / (len_eA * len_eC), -1.0, 1.0)
-    cos_alphaC = np.clip(np.sum(eB * -eA, axis=1) / (len_eB * len_eA), -1.0, 1.0)
-    sin_alphaA = np.sqrt(1 - cos_alphaA**2)
-    sin_alphaB = np.sqrt(1 - cos_alphaB**2)
-    sin_alphaC = np.sqrt(1 - cos_alphaC**2)
-    
-    # Weights -- Equation 2 of Max (1999), i.e., sin(alpha) / (|V_i| * |V_{i+1}|)
-    cA = sin_alphaA / (len_eB * len_eC)
-    cB = sin_alphaB / (len_eA * len_eC)
-    cC = sin_alphaC / (len_eA * len_eB)
-
-    # Allocate space for vertex normals
-    vn = np.zeros((nvtx,3))
+    # Weights -- Simplified, faster, same results as Max (1999)
+    cA = area / (lengths[:,1] * lengths[:,2]) ** 2 # (b*c)^2
+    cB = area / (lengths[:,2] * lengths[:,0]) ** 2 # (c*a)^2
+    cC = area / (lengths[:,0] * lengths[:,1]) ** 2 # (a*b)^2
 
     # Accumulate weighted face normal contributions
     # thus avoiding to iterate over vertices
+    vn = np.zeros((nvtx,3))
     np.add.at(vn, fac[:,0], cA[:,None] * fn)
     np.add.at(vn, fac[:,1], cB[:,None] * fn)
     np.add.at(vn, fac[:,2], cC[:,None] * fn)
@@ -187,16 +169,15 @@ def signed_area(tri, rfn=None): # =============================================
         Face normals (x,y,z).
 
     '''
-    eA   = tri[:,2,:] - tri[:,1,:] # edge opposite to A
-    eC   = tri[:,1,:] - tri[:,0,:] # edge opposite to C
-    fn   = np.cross(eC, eA, axis=1)
-    area = np.linalg.norm(fn, axis=1) / 2.0
-    idx  = area != 0
+    edges = tri[:,[2,0,1],:] - tri[:,[1,2,0],:] # a=C-B, b=A-C, c=B-A
+    fn    = np.cross(edges[:,1,:], edges[:,2,:], axis=1) # b and c
+    area  = np.linalg.norm(fn, axis=1) / 2.0
+    idx   = area != 0
     fn[idx,:] /= np.linalg.norm(fn[idx,:], axis=1)[:,None]
     if rfn is not None:
         sgn   = np.sign(np.sum(fn * rfn, axis=1))
         area *= sgn
-    return area[:,None], fn
+    return area, fn
 
 def line_intersection(A,B,C,D): # =============================================
     '''
@@ -286,10 +267,10 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     # Vertex coordinates of circumcenter
     eA   = triABC[:,1,:] - triABC[:,2,:] # edge opposite to A, centered at C
     eB   = triABC[:,0,:] - triABC[:,2,:] # edge opposite to B, centered at C
-    Pnum = np.cross( ( np.linalg.norm(eA, axis=1, keepdims=True)**2*eB - 
-                       np.linalg.norm(eB, axis=1, keepdims=True)**2*eA ),
-                     np.cross(eA,eB) )
-    Pden = 2*np.linalg.norm(np.cross(eA,eB), axis=1, keepdims=True)**2
+    cp = np.cross(eA,eB)
+    Pnum = np.cross((np.linalg.norm(eA, axis=1, keepdims=True)**2*eB - 
+                     np.linalg.norm(eB, axis=1, keepdims=True)**2*eA), cp)
+    Pden = 2*np.linalg.norm(cp, axis=1, keepdims=True)**2
     P    = Pnum / Pden + triABC[:,2,:]
     P    = P[:,None,:]
     
@@ -334,7 +315,7 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     area['PBC'] = area['BaP'] + area['CPa']
     
     # If the circumcenter P is outside edge c (segment AB)
-    idx = area['ABP'][:,0] < 0
+    idx = area['ABP'] < 0
     if idx.any():
         m[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,1,:], P[idx,0,:])[0][:,None,:] # intersection AB x bP
         n[idx,:,:] = line_intersection(triABC[idx,0,:], triABC[idx,1,:], triabc[idx,0,:], P[idx,0,:])[0][:,None,:] # intersection AB x aP
@@ -342,7 +323,7 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
         tri['BPn'][idx,:,:] = np.concatenate((triABC[idx,1,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
     
     # If the circumcenter P is outside edge b (segment CA)
-    idx = area['APC'][:,0] < 0
+    idx = area['APC'] < 0
     if idx.any():
         m[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,0,:], P[idx,0,:])[0][:,None,:] # intersection CA x aP
         n[idx,:,:] = line_intersection(triABC[idx,2,:], triABC[idx,0,:], triabc[idx,2,:], P[idx,0,:])[0][:,None,:] # intersection CA x cP
@@ -350,7 +331,7 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
         tri['APn'][idx,:,:] = np.concatenate((triABC[idx,0,None,:], P[idx,:,:], n[idx,:,:]), axis=1)
     
     # If the circumcenter P is outside edge a (segment BC)
-    idx = area['PBC'][:,0] < 0
+    idx = area['PBC'] < 0
     if idx.any():
         m[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,2,:], P[idx,0,:])[0][:,None,:] # intersection BC x cP
         n[idx,:,:] = line_intersection(triABC[idx,1,:], triABC[idx,2,:], triabc[idx,1,:], P[idx,0,:])[0][:,None,:] # intersection BC x bP
@@ -365,16 +346,16 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     
     # These are the excesses or shortages, to be added or subtracted later.
     # Note that the area is always signed.
-    area['Pmc'] = area['AcP'] - area['AmP']
-    area['Pmb'] = area['CbP'] - area['CmP']
-    area['Pma'] = area['BaP'] - area['BmP']
-    area['Pan'] = area['CPa'] - area['CPn']
-    area['Pbn'] = area['APb'] - area['APn']
-    area['Pcn'] = area['BPc'] - area['BPn']
+    area['Pmc'] = area['AcP'] - area['AmP'] # refer to case ABP being negative
+    area['Pcn'] = area['BPc'] - area['BPn'] # refer to case ABP being negative
+    area['Pmb'] = area['CbP'] - area['CmP'] # refer to case APC being negative
+    area['Pbn'] = area['APb'] - area['APn'] # refer to case APC being negative
+    area['Pma'] = area['BaP'] - area['BmP'] # refer to case PBC being negative
+    area['Pan'] = area['CPa'] - area['CPn'] # refer to case PBC being negative
     
     # Now apply the correction where needed. Recall the areas are always signed.
     # If the circumcenter P is outside edge c (segment AB)
-    idx = area['ABP'][:,0] < 0
+    idx = area['ABP'] < 0
     if idx.any():
         area['AcP'][idx] -= area['Pmc'][idx]
         area['BPc'][idx] -= area['Pcn'][idx]
@@ -382,7 +363,7 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
         area['CPa'][idx] += area['Pcn'][idx] # This isn't accurate but will be correct when added to area['CbP']
         
     # If the circumcenter P is outside edge b (segment CA)
-    idx = area['APC'][:,0] < 0
+    idx = area['APC'] < 0
     if idx.any():
         area['CbP'][idx] -= area['Pmb'][idx]
         area['APb'][idx] -= area['Pbn'][idx]
@@ -390,7 +371,7 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
         area['BPc'][idx] += area['Pbn'][idx] # This isn't accurate but will be correct when added to area['BaP']
     
     # If the circumcenter P is outside edge a (segment BC)
-    idx = area['PBC'][:,0] < 0
+    idx = area['PBC'] < 0
     if idx.any():
         area['BaP'][idx] -= area['Pma'][idx]
         area['CPa'][idx] -= area['Pan'][idx]
@@ -399,114 +380,15 @@ def calc_voronoi_areas(vtx, fac): # ===========================================
     
     # Voronoi area for each vertex of each face.
     # Again, recall the areas are always signed.
-    vorf = np.concatenate((
+    vorf = np.stack((
         area['AcP'] + area['APb'],
         area['BaP'] + area['BPc'],
         area['CbP'] + area['CPa']), axis=1)
     
     # Accumulate vertex Voronoi areas for faces that meet at that vertex
     vorv = np.zeros(nvtx)
-    np.add.at(vorv, fac[:,0], vorf[:,0])
-    np.add.at(vorv, fac[:,1], vorf[:,1])
-    np.add.at(vorv, fac[:,2], vorf[:,2])
+    np.add.at(vorv, fac, vorf)
     return vorv, vorf, areaABC
-
-def calc_angular_areas(vtx, fac): # ===========================================
-    '''
-    Compute the angular areas for each vertex and, within a face, for each
-    vertex of that face. This function is currently unused.
-
-    Parameters
-    ----------
-    vtx : NumPy array with 3 columns (float).
-        Vextex coordinates.
-    fac : NumPy array with 3 columns (int).
-        Face indices.
-
-    Returns
-    -------
-    angv : NumPy vector (float)
-        Angular area per vertex.
-    angf : NumPy array with 3 columns (float).
-        Angular area per vertex per face.
-    areas : NumPy vector (float)
-        Area per face
-
-    Note that np.sum(angf, axis=1) is the same as area, whereas angv contains
-    the sum of all values in angf for that vertex (referenced by fac).
-    '''
-    
-    # Number of vertices
-    nvtx = vtx.shape[0]
-        
-    # Vertices and edges of the current face
-    vA = vtx[fac[:,0]]
-    vB = vtx[fac[:,1]]
-    vC = vtx[fac[:,2]]
-    eA = vC - vB  # V_{i}
-    eB = vA - vC  # V_{i+1} for vA
-    eC = vB - vA  # V_{i+1} for vB when cycling back
-                
-    # Edge lengths
-    len_eA = np.linalg.norm(eA, axis=1)
-    len_eB = np.linalg.norm(eB, axis=1)
-    len_eC = np.linalg.norm(eC, axis=1)
-
-    # Angles at each vertex, clip to avoid numerical problems
-    cos_alphaA = np.clip(np.sum(eC * -eB, axis=1) / (len_eC * len_eB), -1.0, 1.0)
-    cos_alphaB = np.clip(np.sum(eA * -eC, axis=1) / (len_eA * len_eC), -1.0, 1.0)
-    cos_alphaC = np.clip(np.sum(eB * -eA, axis=1) / (len_eB * len_eA), -1.0, 1.0)
-    alphaA     = np.arccos(cos_alphaA)
-    alphaB     = np.arccos(cos_alphaB)
-    alphaC     = np.arccos(cos_alphaC)
-        
-    # Area of the entire face
-    areas = np.linalg.norm(np.cross(eA, eB, axis=1), axis=1) / 2.0
-
-    # Angular area for each vertex of a face
-    # Angular area = area * (angle / sum of angles)
-    angf = areas[:, None] * np.vstack((alphaA, alphaB, alphaC)).T / np.pi 
-        
-    # Accumulate vertex Voronoi areas for faces that meet at that vertex
-    angv = np.zeros(nvtx)
-    np.add.at(angv, fac[:,0], angf[:,0])
-    np.add.at(angv, fac[:,1], angf[:,1])
-    np.add.at(angv, fac[:,2], angf[:,2])
-    return angv, angf, areas
-
-def calc_area_volume(vtx, fac): # =============================================
-    '''
-    Compute area and volume for the mesh.
-
-    Parameters
-    ----------
-    vtx : NumPy array with 3 columns (float).
-        Vextex coordinates.
-    fac : NumPy array with 3 columns (int).
-        Face indices.
-
-    Returns
-    -------
-    area : float
-        Total surface area of the mesh.
-    volume : float
-        Total volume within the mesh.
-    '''
-    # Vertex coordinates and two edges
-    vA = vtx[fac[:,0]]
-    vB = vtx[fac[:,1]]
-    vC = vtx[fac[:,2]]
-    eA = vC - vB  # V_{i}
-    eB = vA - vC  # V_{i+1} for vA
-
-    # Area
-    areas = np.linalg.norm(np.cross(eA, eB), axis=1) / 2.0 
-    area  = np.sum(areas)
-    
-    # Volume (sum of signed volumes in relation to a point in the center)
-    volume = np.sum(np.sum(vA * np.cross(vB, vC), axis=1)) / 6.0
-    
-    return area, volume
 
 def calc_rot(n): # ============================================================
     '''
@@ -696,17 +578,16 @@ def calc_curvatures(vtx, fac, vtxn, facn, vorv, vorf): # ======================
         # Confirm that the two principal directions are orthogonal to the normal
         # at this vertex. These two values must be zero; uncomment to test
         # print(np.dot(kd1[v,:],vtxn[v,:]), np.dot(kd2[v,:],vtxn[v,:]))
-        
     return {'k1':k1, 'k2':k2, 'kdir1':kd1, 'kdir2':kd2}
 
 def calc_composites(curvs): # ================================================
     
     # Gaussian curvature
     curvs['K']    = curvs['k1']*curvs['k2']
-    
+
     # Mean curvature
     curvs['H']    = (curvs['k1']+curvs['k2'])/2
-    
+
     # Curvature difference
     curvs['diff'] = curvs['k1'] - curvs['k2']
     
@@ -772,7 +653,7 @@ if __name__ == "__main__":
     parser.add_argument('--out', dest='outprefix', required=True, help="Prefix for output curvature files")
     args = parser.parse_args()
 
-    # Read Wavefront OBJ
+    # Read input file
     print('Reading input file: {}'.format(args.input))
     surfs = ('surf', 'pial', 'white', 'inflated', 'sphere', 'sphere.reg', 'orig')
     if args.intype.lower() == 'obj' or args.input.lower().endswith('obj'):
