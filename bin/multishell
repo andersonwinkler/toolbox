@@ -14,6 +14,144 @@ import re
 import numpy as np
 from scipy import optimize as scopt
 
+# ######[ HELP TEXT ]##########################################################
+
+def print_help():
+    help_text = '''
+Multishell Diffusion MRI Sampling Tool
+
+This command generates, manipulates, converts formats, and displays multishell
+diffusion MRI sampling schemes. It can create new optimal schemes, load existing
+ones from various formats, add or remove b=0 volumes, reorder directions, and
+save the schemes in different formats. It also plots the directions.
+
+A new scheme can be created using a simultaneous optimization (--new simultaneous)
+of all directions across all shells (Equations 2 and 4 of the paper), or by
+incrementally optimizing (--new incremental) by adding one direction at a time
+(page 1537 of the paper, 1st column, 2nd paragraph, just before the Results section).
+
+The simultaneous optimization is superior, as can be demonstrated by plotting
+the directions (--plot interactive). But the incremental optimization has the
+advantage that, if the acquisition during the MRI session is interrupted, the
+result may still be usable as the incremental scheme guarantees a reasonably
+uniform coverage with any number of direction.
+
+But why tradeoff? Here, we can do simultaneous optimization, then reorder 
+(with the option --reorder) the directions optimally, to obtain roughly the
+same benefit of the incremental scheme, which is a reasonably unform coverage
+if the MRI session is interrupted.
+
+If we already have a diffusion sampling scheme in FSL/BIDS format (bvec/bval),
+MRtrix3 format (*.b), Siemens format (*.dvs), GE format (*.dat), Philips format
+(*.txt), or in the format produced by Ed Caruyer's webtool (*.txt), we can load
+these, manipulate them by adding b0 at the beginning, end, or interspersed
+among the other directions (--addb0), remove b0 (--removeb0), and specify or
+change the bvalues (--bvalues).
+
+For plotting (--plot), these can opened interactively, rotated, and saved
+manually from the plotting window, or simply saved to a file in a specified
+format such as *.pdf or *.png without any interaction (good for scripting).
+
+Usage: multishell [options]
+
+Options:
+
+--help
+    Display this help message.
+
+--new <method> <Ks> | <K> <S> <distr>
+    Create a new set of directions using the specified method ('simultaneous'
+    or 'incremental'). Provide either:
+    - <Ks>: a list of integers, e.g., "[10,20,30]", specifying directions per shell.
+    - <K>: total directions, <S>: number of shells, <distr>: "uniform", "linear", or "quadratic".
+    The <distr> parameter specifies if the total number of shells should be
+    distributed uniformly across shells, or linearly as a function of the shell
+    number, or quadratically as a function of the shell number.
+    Examples:
+    --new simultaneous "[10,20,30]"
+    --new incremental 60 3 linear
+
+--alpha <value>
+    Set alpha (0 to 1) for balancing intra/inter-shell repulsion forces when
+    creating new multishell schemes. See Equation 5 in the paper.
+    Default: 0.75 (this is different from the paper, which suggests 0.50)
+
+--load <filename> <format>
+    Load scheme from file in specified format ('fsl', 'mrtrix3', 'siemens',
+    'ge', 'philips', 'caruyer'). For 'siemens' and 'ge', provide --bmax.
+
+
+--reorder
+    Optimally reorder directions.
+
+--bvalues <list>
+    Specify b-values for shells, e.g., "[1000,2000,3000]". This is needed if
+    creating new schemes and saving to a file format that will be used in the
+    scanner. Do not include here bvalues=0; use --addb0 for that.
+
+--addb0 <list>
+    Add b=0 volumes: [start, interspersed, end], e.g., "[4,5,3]".
+    For the interspersed (middle) block, the first b-value will always be 0,
+    so if you also indicate a number to be added at the start, you will find
+    that there is one extra there; to discount that, subtract one from the start.
+
+--removeb0
+    Remove existing b=0 volumes from a file that includes that information.
+
+--bmax <value>
+    Specify maximum b-value for formats that scale vectors (Siemens, GE) as
+    opposed to storing b-values explicitly (Philips, FSL, MRtrix3)
+
+--save <prefix> [format]
+    Save scheme with given prefix in specified format (default: "caruyer").
+    For a 'philips', for the file to be valid, the first direction must have
+    b-value = 0, and further, no directions can be repeated, even for multiple
+    b-values = 0 (so, the direction 0,0,0 cannot be used). The command will
+    take care of that, using random directions even for b-values = 0.
+
+--plot [format]
+    Plot directions. If no format is specified, opens interactively a new window;
+    otherwise, saves in "pdf", "png", "webp", etc.
+
+Examples:
+    
+1. multishell --new incremental 60 3 uniform --bvalues "[1000,2000,3000]" \
+              --addb0 "[4,5,5]" --save my_scheme siemens
+              
+2. multishell --load my_input.dvs siemens --bmax 3000 \
+              --removeb0 --save my_output ge
+              
+3. multishell --load my_input fsl --save my_output philips
+
+4. multishell --new simultaneous ["10,20,30]" --reorder \
+              --bvalues "[1000,2000,3000]" --plot
+
+Supported formats:
+- fsl: FSL bvec/bval files, also BIDS as produced by Chris Rorden's dcm2niix.
+- mrtrix3: MRtrix3 gradient table.
+- siemens: Siemens DVS (requires --bmax).
+- ge: GE tensor.dat (requires --bmax).
+- philips: Philips text format (unique directions).
+- caruyer: Caruyer's webtool format.
+
+Theis commands implements the method originally proposed by:
+    
+* Caruyer E, Lenglet C, Sapiro G, Deriche R. Design of multishell sampling
+  schemes with uniform coverage in diffusion MRI. Magn Reson Med.
+  2013 Jun;69(6):1534-40. doi: 10.1002/mrm.24736.
+  Epub 2013 Apr 26. PMID: 23625329; PMCID: PMC5381389.
+
+If you use this command in your research, please cite the original paper.
+
+_____________________________________
+Anderson M. Winkler
+Univ. of Texas Rio Grande Valley
+April/2025
+http://brainder.org
+    '''
+    print(help_text)
+
+
 # ######[ FILE PARSING ]#######################################################
 
 def read_fsl(filename): # =====================================================
@@ -541,7 +679,7 @@ def remove_b0(bvalues, vectors, shells): # ====================================
     Remove vectors and shells that have a corresponding bvalue = 0.
     Return also an index that allows putting these back.
     '''
-    idx = bvalues != 0
+    idx     = bvalues != 0
     bvalues = bvalues[idx]
     vectors = vectors[idx]
     shells  = shells[idx]
@@ -564,7 +702,8 @@ def unscale_vectors(vectors, bmax): #==========================================
     '''
     norm     = np.linalg.norm(vectors, axis=1)
     bvalues  = np.round(norm**2 * bmax).astype(int)[:,None]
-    vectors /= norm
+    idx = norm != 0
+    vectors[idx,:] /= norm[idx,None]
     return vectors, bvalues
 
 # ######[ PLOTTING FUNCTIONS ]#################################################
@@ -624,7 +763,7 @@ def geodesic_sphere(n=2): # ===================================================
 
 def uv_sphere(nlat=20, nlon=20): # ============================================
     '''
-    Make a UV (latitude-longitude) sphere based.
+    Make a UV (latitude-longitude) sphere.
     '''
     vtx = []
     vtx.append([0.0, 0.0, 1.0]) # North pole
@@ -819,11 +958,11 @@ def plot_directions(vectors, shells, filename=None,
 
     # Colorbar  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if style == 'points':
-        plt.colorbar(sc, ax=ax, label='Shell', ticks=Ss)
+        plt.colorbar(sc, ax=ax, label='Shell', ticks=Ss, fraction=0.05, shrink=0.5)
     else:
         sm = cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array(Ss)
-        cbar = plt.colorbar(sm, ax=ax, label='Shell', ticks=Ss)
+        cbar = plt.colorbar(sm, ax=ax, label='Shell', ticks=Ss, fraction=0.05, shrink=0.5)
         cbar.set_ticklabels([f'{k:.0f}' for k in Ss])
     ax.set_clip_on(True)
     
@@ -835,136 +974,9 @@ def plot_directions(vectors, shells, filename=None,
         plt.close(fig)
 
 
-# ######[ PARSE ARGUMENTS & HELP ]#############################################
+# ######[ PARSE ARGUMENTS ]####################################################
 
-def print_help():
-    help_text = '''
-Multishell Diffusion MRI Sampling Tool
-
-This command generates, manipulates, converts formats, and displays multishell
-diffusion MRI sampling schemes. It can create new optimal schemes, load existing
-ones from various formats, add or remove b=0 volumes, reorder directions, and
-save the schemes in different formats. It also plots the directions.
-
-The function implements the method originally proposed by:
-    
-* Caruyer E, Lenglet C, Sapiro G, Deriche R. Design of multishell sampling
-  schemes with uniform coverage in diffusion MRI. Magn Reson Med.
-  2013 Jun;69(6):1534-40. doi: 10.1002/mrm.24736.
-  Epub 2013 Apr 26. PMID: 23625329; PMCID: PMC5381389.
-
-If you use this command in your research, be sure to cite the original paper.
-
-A new scheme can be created using a simultaneous optimization (--new simultaneous)
-of all directions across all shells (Equations 2 and 4 of the paper), or by
-incrementally optimizing (--new incremental) by adding one direction at a time
-(page 1537 of the paper, 1st column, 2nd paragraph, just before the Results section).
-
-The simultaneous optimization is superior, as can be demonstrated by plotting
-the directions (--plot interactive). But the incremental optimization has the
-advantage that, if the acquisition during the MRI session is interrupted, the
-result may still be usable as the incremental scheme guarantees a reasonably
-uniform coverage with any number of direction.
-
-But why tradeoff? Here, we can do simultaneous optimization, then reorder 
-(with the option --reorder) the directions optimally, to obtain roughly the
-same benefit of the incremental scheme, which is a reasonably unform coverage
-if the MRI session is interrupted.
-
-If we already have a diffusion sampling scheme in FSL/BIDS format (bvec/bval),
-MRtrix3 format (*.b), Siemens format (*.dvs), GE format (*.dat), Philips format
-(*.txt), or in the format produced by Ed Caruyer's webtool (*.txt), we can load
-these, manipulate them by adding b0 at the beginning, end, or interspersed
-among the other directions (--addb0), remove b0 (--removeb0), and specify or
-change the bvalues (--bvalues).
-
-For plotting (--plot), these can opened interactively, rotated, and saved
-manually from the plotting window, or simply saved to a file in a specified
-format such as *.pdf or *.png without any interaction (good for scripting).
-
-Usage: multishell [options]
-
-Options:
-
---help
-    Display this help message.
-
---new <method> <Ks> | <K> <S> <distr>
-    Create a new set of directions using the specified method ('simultaneous'
-    or 'incremental'). Provide either:
-    - <Ks>: a list of integers, e.g., "[10,20,30]", specifying directions per shell.
-    - <K>: total directions, <S>: number of shells, <distr>: "uniform", "linear", or "quadratic".
-    The <distr> parameter specifies if the total number of shells should be
-    distributed uniformly across shells, or linearly as a function of the shell
-    number, or quadratically as a function of the shell number.
-    Examples:
-    --new simultaneous "[10,20,30]"
-    --new incremental 60 3 linear
-
---alpha <value>
-    Set alpha (0 to 1) for balancing intra/inter-shell repulsion forces.
-    See Equation 5 in the paper.
-    Default: 0.5.
-
---reorder
-    Optimally reorder directions.
-
---bvalues <list>
-    Specify b-values for shells, e.g., "[1000,2000,3000]". This is needed if
-    creating new schemes and saving to a file format that will be used in the
-    scanner.
-
---bmax <value>
-    Specify maximum b-value for formats that scale vectors (Siemens, GE) as
-    opposed to storing b-values explicitly (Philips, FSL, MRtrix3)
-
---addb0 <list>
-    Add b=0 volumes: [start, interspersed, end], e.g., "[4,5,3]".
-    For the interspersed (middle) block, the first b-value will always be 0,
-    so if you also indicate a number to be added at the start, you will find
-    that there is one extra there; to discount that, subtract one from the start.
-
---removeb0
-    Remove existing b=0 volumes from a file that includes that information.
-
---load <filename> <format>
-    Load scheme from file in specified format ('fsl', 'mrtrix3', 'siemens',
-    'ge', 'philips', 'caruyer'). For 'siemens' and 'ge', provide --bmax.
-
---save <prefix> [format]
-    Save scheme with given prefix in specified format (default: "caruyer").
-    For a 'philips', for the file to be valid, the first direction must have
-    b-value = 0, and further, no directions can be repeated, even for multiple
-    b-values = 0 (so, the direction 0,0,0 cannot be used). The command will
-    take care of that, using random directions even for b-values = 0.
-
---plot [format]
-    Plot directions. If no format is specified, opens interactively a new window;
-    otherwise, saves in "pdf", "png", "webp", etc.
-
-Examples:
-1. multishell --new incremental 60 3 uniform --bvalues "[1000,2000,3000]" --addb0 "[4,5,5]" --save my_scheme siemens
-2. multishell --load my_input.dvs siemens --bmax 3000 --removeb0 --save my_output ge
-3. multishell --load my_input fsl --save my_output philips
-4. multishell --new simultaneous ["10,20,30]" --reorder --bvalues "[1000,2000,3000]" --plot
-
-Supported formats:
-- fsl: FSL bvec/bval files, also used by BIDS and as produced by Chris' Rorden dcm2niix tool.
-- mrtrix3: MRtrix3 gradient table.
-- siemens: Siemens DVS (requires --bmax).
-- ge: GE tensor.dat (requires --bmax).
-- philips: Philips text format (unique directions).
-- caruyer: Caruyer's webtool format.
-
-_____________________________________
-Anderson M. Winkler
-Univ of Texas Rio Grande Valley
-April/2025
-http://brainder.org
-    '''
-    print(help_text)
-
-def takeargs(args, defaults): # ===============================================
+def take_args(args, defaults): # ==============================================
     '''
     Parse arguments
     '''
@@ -1067,7 +1079,7 @@ def takeargs(args, defaults): # ===============================================
             raise ValueError('Unknown option: {}'.format(args[a]))
     return args, state
 
-def checkerrors(args, state): # ===============================================
+def check_errors(args, state): # ==============================================
     '''
     Check for most likely errors when calling the command.
     '''
@@ -1093,6 +1105,10 @@ def checkerrors(args, state): # ===============================================
                 ' (a) a list with directions for each shell or '
                 ' (b) number of directions, number of shells, '
                 '     and how directions should be distributed.')
+            
+        if state['K'] is not None and state['S'] is not None:
+            if state['S'] > state['K']:
+                raise ValueError('Cannot have more shells than directions.')
             
         if state['bvalues'] is not None and state['S'] is not None:
             if (len(state['bvalues']) != state['S']):
@@ -1142,17 +1158,17 @@ if __name__ == "__main__":
     
     # Defaults  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     defaults = {
-            'alpha'      : 0.5,            # balance between intra and inter-shell energies
+            'alpha'      : 0.75,           # unlike in the paper, we use alpha=0.75 (not 0.50)
             'maxiter'    : 500,            # maximum number of iterations for the optimizers
             'outtype'    : 'caruyer',      # format of the output file
             'plotformat' : 'interactive' } # format to save outputs (pdf or png)
     
     # Parse arguments and check for errors
-    args, state = takeargs(sys.argv[1:], defaults)
-    args, state = checkerrors(args, state)
+    args, state = take_args(sys.argv[1:], defaults)
+    args, state = check_errors(args, state)
     
     # Call help . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
-    if '--help' in args:
+    if '--help' in args or len(args) == 0:
         print_help()
         sys.exit(0)
         
@@ -1213,8 +1229,8 @@ if __name__ == "__main__":
     # Ensure bvalues is a column vector, count number of shells . . . . . . . .
     if state['bvalues'] is not None:
         if type(state['bvalues']) is list:
-            state['bvalues'] = np.array(state['bvalues'])[:,None]
-        state['bvalues'] = state['bvalues'][state['shells'][:,0],0][:,None]
+            state['bvalues'] = np.array(state['bvalues'])
+            state['bvalues'] = state['bvalues'][state['shells'][:,0]][:,None]
     state['S'] = len(np.unique(state['shells'][:,0]))
     
     # Optimally reorder the directions if asked . . . . . . . . . . . . . . . .
@@ -1246,6 +1262,13 @@ if __name__ == "__main__":
     if '--addb0' in args:
         
         print('Adding bvalues = 0')
+        
+        # Keep the existing shells for b>0, reindex from 0 if needed
+        bidx    = state['bvalues'][:,0] != 0
+        shellsb = state['shells'][bidx]
+        shellsb = shellsb - shellsb.min()
+        
+        # Add new bvalues = 0
         if state['outtype'] == 'philips':
             unique = True
         else:
@@ -1259,6 +1282,11 @@ if __name__ == "__main__":
         state['vectors'], state['bvalues'] = \
             add_b0(state['vectors'], state['bvalues'], \
                    K0=state['addb0'][2], unique=unique, where='end')
+        
+        # Restore shells
+        bidx = state['bvalues'][:,0] != 0
+        state['shells'] = np.zeros(state['bvalues'].shape)
+        state['shells'][bidx] = shellsb + 1
     
     # Save direction set . . . . . . . . . . . . . . . . . . . . . . . . . . . 
     if '--save' in args:
@@ -1304,9 +1332,10 @@ if __name__ == "__main__":
             
         elif state['outtype'] == 'caruyer':
             # Write directions in Caruyer's webtool format
+            bidx = state['bvalues'][:,0] != 0
             write_caruyer(state['outprefix'] + '.txt',
-                          state['vectors'],
-                          state['shells'])
+                          state['vectors'][bidx],
+                          state['shells'][bidx])
 
     # Plot . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 
     if '--plot' in args:
@@ -1322,15 +1351,15 @@ if __name__ == "__main__":
             Reproject = (True,)
         else:
             Reproject = (False, True)
-        
+
         # Make the figures for the interactive or save mode
         if state['plotformat'] == 'interactive':
-            # In the interactive mode, the user saves throgh the plot window
+            # In the interactive mode, the user saves through the plot window
             print('Plotting directions in interactive mode')
             for style in ['quiver', 'blobs']:
                 for reproject in Reproject:
                     plot_directions(state['vectors'][bidx],
-                                    state['shells'],
+                                    state['shells'][bidx],
                                     style=style,
                                     reproject=reproject)
         else:
@@ -1340,7 +1369,7 @@ if __name__ == "__main__":
                 for reproject in Reproject:
                     filename = '{}-{}-reproj{}.{}'.format(state['outprefix'], style, reproject, state['plotformat'])
                     plot_directions(state['vectors'][bidx],
-                                    state['shells'],
+                                    state['shells'][bidx],
                                     filename=filename,
                                     style=style,
                                     reproject=reproject)
