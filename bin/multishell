@@ -656,6 +656,8 @@ def add_b0(vectors, bvalues, K0=1, where='interspersed', unique=False): # =====
     Some vendors require directions to be unique (e.g., Philips), so we'll
     create random vectors (that are unlikely to be repeated) for bvalues=0.
     '''
+    if K0 == 0:
+        return vectors, bvalues
     if unique:
         vectors0 = random_vectors(K0)
     else:
@@ -1376,10 +1378,12 @@ if __name__ == "__main__":
             print('Plotting directions in interactive mode')
             for style in ['quiver', 'blobs']:
                 for reproject in Reproject:
-                    plot_directions(state['vectors'][bidx],
-                                    state['shells'][bidx],
-                                    style=style,
-                                    reproject=reproject)
+                    for colorby in ('shell','acquisition'):
+                        plot_directions(state['vectors'][bidx],
+                                        state['shells'][bidx],
+                                        style=style,
+                                        colorby=colorby,
+                                        reproject=reproject)
         else:
             # In the non-interactive mode, the images are saved as is
             print('Plotting directions and saving image filesas: {}-*.{}'.format(state['outprefix'], state['plotformat']))
