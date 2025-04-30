@@ -7,8 +7,6 @@ Created on Sun Apr 13 00:28:38 2025
 """
 
 import os
-os.environ['MKL_ENABLE_INSTRUCTIONS'] = 'SSE4_2'
-
 import sys
 import re
 import numpy as np
@@ -115,16 +113,16 @@ Options:
 
 Examples:
     
-1. multishell --new incremental 60 3 uniform --bvalues "[1000,2000,3000]" \
-              --addb0 "[4,5,5]" --save my_scheme siemens
+multishell --new incremental 60 3 uniform --bvalues "[1000,2000,3000]" \\
+           --addb0 "[4,5,5]" --save my_scheme siemens
               
-2. multishell --load my_input.dvs siemens --bmax 3000 \
-              --removeb0 --save my_output ge
+multishell --load my_input.dvs siemens --bmax 3000 \\
+           --removeb0 --save my_output ge
               
-3. multishell --load my_input fsl --save my_output philips
+multishell --load my_input fsl --save my_output philips
 
-4. multishell --new simultaneous ["10,20,30]" --reorder \
-              --bvalues "[1000,2000,3000]" --plot
+multishell --new simultaneous ["10,20,30]" --reorder \\
+           --bvalues "[1000,2000,3000]" --plot
 
 Supported formats:
 - fsl: FSL bvec/bval files, also BIDS as produced by Chris Rorden's dcm2niix.
@@ -822,7 +820,7 @@ def northern_hemisphere(vtx, fac): # ==========================================
     newfac = newidx[fidx]
     return newvtx, newfac
 
-def plot_directions(vectors, shells, filename=None,
+def plot_directions(vectors, shells, filename=None, colorby='shell',
                     style='quiver', reproject=False): # =======================
     """
     Plot a multishell direction scheme with geodesic spheres for each shell.
@@ -840,8 +838,9 @@ def plot_directions(vectors, shells, filename=None,
     
     # Here we want the shell indices to start at 1
     shells = shells - shells.min() + 1
-    Ss = np.unique(shells)
-    S  = len(Ss)
+    uS = np.unique(shells)
+    S  = len(uS)
+    K  = len(vectors)
 
     # We only need one hemisphere of the shells; let's flip so that they
     # are all on the +z hemisphere, i.e., above the "equator".
@@ -858,11 +857,19 @@ def plot_directions(vectors, shells, filename=None,
         cmap = mcolors.LinearSegmentedColormap.from_list('multishell', colors, N=2**10)
         matplotlib.colormaps.register(cmap)
     cmap   = plt.get_cmap('multishell')
-    colors = [cmap(i / (S - 1)) if S > 1 else cmap(0.5) for i in range(S)]
+    if   colorby == 'shell':
+        C     = S
+        Cidx  = shells
+        uCidx = uS
+    elif colorby == 'acquisition':
+        C     = K
+        Cidx  = np.arange(K) + 1
+        uCidx = Cidx
+    colors = [cmap(c / (C - 1)) if C > 1 else cmap(0.5) for c in range(C)]
     cmap   = mcolors.ListedColormap(colors)
-    bounds = np.concatenate([[Ss[0] - 0.5], 
-                             (Ss[:-1] + Ss[1:]) / 2, 
-                             [Ss[-1] + 0.5]])
+    bounds = np.concatenate([[uCidx[0]   - 0.5], 
+                             (uCidx[:-1] + uCidx[1:]) / 2, 
+                             [uCidx[-1]  + 0.5]])
     norm   = mcolors.BoundaryNorm(bounds, cmap.N)
     
     # Set up axes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
@@ -887,7 +894,7 @@ def plot_directions(vectors, shells, filename=None,
     # Directions  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if style == 'points':
         sc = ax.scatter(vectors[:,0], vectors[:,1], vectors[:,2], 
-                        c=shells.ravel(order='C'), cmap=cmap, norm=norm, alpha=1, s=5)
+                        c=Cidx.ravel(order='C'), cmap=cmap, norm=norm, alpha=1, s=5)
     elif style == 'quiver':
         for i, vec in enumerate(vectors):
             if reproject:
@@ -895,7 +902,7 @@ def plot_directions(vectors, shells, filename=None,
             else:
                 arrow_length_ratio = .1*S/shells[i]
             ax.quiver(0, 0, 0, vec[0], vec[1], vec[2], 
-                      color=cmap(norm(shells[i])), alpha=1, linewidth=1.5,
+                      color=cmap(norm(Cidx[i])), alpha=1, linewidth=1.5,
                       arrow_length_ratio=arrow_length_ratio)
     elif style == 'rings':
         for i, vec in enumerate(vectors):
@@ -911,7 +918,7 @@ def plot_directions(vectors, shells, filename=None,
             v    /= np.linalg.norm(vec)
             phi   = np.linspace(0, 2*np.pi, 12)
             circle = vec + r * (np.cos(phi)[:,None]*u + np.sin(phi)[:,None]*v)
-            ax.plot(circle[:,0], circle[:,1], circle[:,2], color=cmap(norm(shells[i])))
+            ax.plot(circle[:,0], circle[:,1], circle[:,2], color=cmap(norm(Cidx[i])))
     elif style == 'blobs':
         from mpl_toolkits.mplot3d import art3d
         for i, vec in enumerate(vectors):
@@ -927,7 +934,7 @@ def plot_directions(vectors, shells, filename=None,
             v    /= np.linalg.norm(vec)
             phi   = np.linspace(0, 2*np.pi, 12)
             circle = vec + r * (np.cos(phi)[:,None]*u + np.sin(phi)[:,None]*v)
-            ax.add_collection(art3d.Poly3DCollection(circle[None,:], facecolors=cmap(norm(shells[i])), linewidth=0))
+            ax.add_collection(art3d.Poly3DCollection(circle[None,:], facecolors=cmap(norm(Cidx[i])), linewidth=0))
         ax.view_init(elev=90, azim=0)
     else:
         raise ValueError("Style must be 'points' or 'quiver', 'rings', or 'blobs'.")
@@ -939,7 +946,7 @@ def plot_directions(vectors, shells, filename=None,
     edg = set()
     for f in fac:
         edg.update([(min(a,b), max(a,b)) for a, b in zip(f, np.roll(f,-1))])
-    for shell in Ss:
+    for shell in uS:
         if reproject:
             svtx = vtx
         else:
@@ -957,13 +964,21 @@ def plot_directions(vectors, shells, filename=None,
             break
 
     # Colorbar  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+    if   colorby == 'shell':
+        label = 'Shell'
+        ticks = uCidx
+        ticklabels = [f'{c:.0f}' for c in uCidx]
+    elif colorby == 'acquisition':
+        label = 'Acquisition'
+        ticks = np.linspace(1,K,3)
+        ticklabels = [f'{c:.0f}' for c in (1,(1+K)/2,K)]
     if style == 'points':
-        plt.colorbar(sc, ax=ax, label='Shell', ticks=Ss, fraction=0.05, shrink=0.5)
+        plt.colorbar(sc, ax=ax, label=label, ticks=ticks, fraction=0.05, shrink=0.5)
     else:
         sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array(Ss)
-        cbar = plt.colorbar(sm, ax=ax, label='Shell', ticks=Ss, fraction=0.05, shrink=0.5)
-        cbar.set_ticklabels([f'{k:.0f}' for k in Ss])
+        sm.set_array(uCidx)
+        cbar = plt.colorbar(sm, ax=ax, label=label, ticks=ticks, fraction=0.05, shrink=0.5)
+        cbar.set_ticklabels(ticklabels)
     ax.set_clip_on(True)
     
     # Save figure . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
@@ -1332,7 +1347,10 @@ if __name__ == "__main__":
             
         elif state['outtype'] == 'caruyer':
             # Write directions in Caruyer's webtool format
-            bidx = state['bvalues'][:,0] != 0
+            if state['bvalues'] is None:
+                bidx = np.full((len(state['vectors']),), True)
+            else:
+                bidx = state['bvalues'][:,0] != 0
             write_caruyer(state['outprefix'] + '.txt',
                           state['vectors'][bidx],
                           state['shells'][bidx])
@@ -1367,11 +1385,13 @@ if __name__ == "__main__":
             print('Plotting directions and saving image filesas: {}-*.{}'.format(state['outprefix'], state['plotformat']))
             for style in ['quiver', 'blobs']:
                 for reproject in Reproject:
-                    filename = '{}-{}-reproj{}.{}'.format(state['outprefix'], style, reproject, state['plotformat'])
-                    plot_directions(state['vectors'][bidx],
-                                    state['shells'][bidx],
-                                    filename=filename,
-                                    style=style,
-                                    reproject=reproject)
+                    for colorby in ('shell','acquisition'):
+                        filename = '{}-{}-reproj{}-colorby{}.{}'.format(state['outprefix'], style, reproject, colorby, state['plotformat'])
+                        plot_directions(state['vectors'][bidx],
+                                        state['shells'][bidx],
+                                        filename=filename,
+                                        colorby=colorby,
+                                        style=style,
+                                        reproject=reproject)
     print('Done!')
     sys.exit(0)
