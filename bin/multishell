@@ -1342,6 +1342,11 @@ if __name__ == "__main__":
                 rndvec = random_vectors(1)
                 state['vectors'] = np.vstack((rndvec,state['vectors']))
                 state['bvalues'] = np.vstack((0,state['bvalues']))
+            b0idx = state['bvalues'][:,0] == 0
+            if np.unique(state['vectors'][b0idx], axis=0).shape[0] != state['vectors'][b0idx].shape[0]:
+                print('For Philips, there cannot be repeated directions, not even for b0. ' + 
+                      'Replacing repeated directions for b0 with random directions.')
+                state['vectors'][b0idx] = random_vectors(sum(b0idx))
             write_philips(state['outprefix'] + '.txt',
                           state['vectors'],
                           state['bvalues'],
