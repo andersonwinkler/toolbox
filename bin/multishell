@@ -856,9 +856,9 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
 
     # Custom colormap . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if 'multishell' not in plt.colormaps():
-        colors = [(1.0, 0, 0),
-                  (0, 0.9, 0),
-                  (0, 0, 1.0)]
+        colors = [(.95, .05, .05),
+                  (.05, .85, .05),
+                  (.05, .05, .95)]
         cmap = mcolors.LinearSegmentedColormap.from_list('multishell', colors, N=2**10)
         matplotlib.colormaps.register(cmap)
     cmap   = plt.get_cmap('multishell')
@@ -921,7 +921,7 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
             u    /= np.linalg.norm(vec)
             v     = np.cross(vec, u)
             v    /= np.linalg.norm(vec)
-            phi   = np.linspace(0, 2*np.pi, 12)
+            phi   = np.linspace(0, 2*np.pi, 36)
             circle = vec + r * (np.cos(phi)[:,None]*u + np.sin(phi)[:,None]*v)
             ax.plot(circle[:,0], circle[:,1], circle[:,2], color=cmap(norm(Cidx[i])))
     elif style == 'blobs':
@@ -937,7 +937,7 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
             u    /= np.linalg.norm(vec)
             v     = np.cross(vec, u)
             v    /= np.linalg.norm(vec)
-            phi   = np.linspace(0, 2*np.pi, 12)
+            phi   = np.linspace(0, 2*np.pi, 36)
             circle = vec + r * (np.cos(phi)[:,None]*u + np.sin(phi)[:,None]*v)
             ax.add_collection(art3d.Poly3DCollection(circle[None,:], facecolors=cmap(norm(Cidx[i])), linewidth=0))
         ax.view_init(elev=90, azim=0)
