@@ -47,13 +47,13 @@ def parseArguments(argv): # ===================================================
     else:
         epilog = "Run without arguments for basic usage information."
         parser = argparse.ArgumentParser(description=description, epilog=epilog)
-        parser.add_argument('-n', '--nidb',      help="Input NIDB directory.",
+        parser.add_argument('-n', '--nidb',     help="Input NIDB directory.",
                             type=str, dest='dirin', action='store', required=False)
-        parser.add_argument('-b', '--bids',      help="Output BIDS directory.",
+        parser.add_argument('-b', '--bids',     help="Output BIDS directory.",
                             type=str, dest='dirout', action='store', required=True)
         parser.add_argument('-s', '--ses2sub',  help="Use study name as subject name.",
                             dest='ses2sub', action='store_true', required=False)
-        parser.add_argument('-r', '--renumber',  help="Re-number sessions, runs and echos to 1, 2, etc...",
+        parser.add_argument('-r', '--renumber', help="Re-number sessions, runs and echos to 1, 2, etc...",
                             dest='renumber', action='store_true', required=False)
         args = parser.parse_args(argv[1:])
         return args
@@ -64,6 +64,7 @@ def readjson(jsonfile): # =====================================================
     return J
 
 def writejson(J, jsonfile): # =================================================
+    link2copy(jsonfile)
     with open(jsonfile, 'w') as fp:
         json.dump(J, fp, indent=2)
     return
@@ -76,11 +77,13 @@ def readhdr(niftifile): # =====================================================
 
 def link2copy(file): # ========================================================
     # Replaces a hard link for an actual copy of the file
-    pth, nam = os.path.split(file)
-    tmpfile = os.path.join(pth, '{}.tmp'.format(nam))
-    copyfile(file, tmpfile)
-    os.remove(file)
-    os.rename(tmpfile, file)
+    nlinks = os.stat(file).st_nlink
+    if nlinks > 1:
+        pth, nam = os.path.split(file)
+        tmpfile = os.path.join(pth, '{}.tmp'.format(nam))
+        copyfile(file, tmpfile)
+        os.remove(file)
+        os.rename(tmpfile, file)
     return
 
 def isbidsfile(filename): # ===================================================
@@ -197,7 +200,6 @@ if args.dirin != None:
                 
                 # Take this opportunity to ensure it's a real copy (not a hard link),
                 # and swap ProtocolName and SeriesDescription (an issue with GE only).
-                link2copy(os.path.join(args.dirout, f))
                 swapfields(os.path.join(args.dirout, f))
                 
                 # This is the NIDB ID and a few other info, from the file names:
@@ -277,9 +279,9 @@ if args.dirin != None:
                 B0_source     = ''
                 multi_echo    = False
     
-                # ===== ANATOMY ===================================================
+                # ===== ANATOMY ===============================================
                 print('Simplified SeriesDescription: {}'.format(series_description))
-                if 'mpraget1ax08mmti' in series_description: # --------------------
+                if 'mpraget1ax08mmti' in series_description: # ----------------
                     # This is a T1w
                     datatype = 'anat'
                     modstr   = '_T1w'
@@ -298,19 +300,19 @@ if args.dirin != None:
                     elif series_description.endswith('ti808'):
                         acqstr = '_acq-TI808'
                     
-                elif 't1mpr08isohcptr2400' in series_description:
+                elif 't1mpr08isohcptr2400' in series_description: # -----------
                     # This is a T1w
                     datatype = 'anat'
                     modstr   = '_T1w'
                     
-                elif 'flair' in series_description: # -----------------------------
+                elif 'flair' in series_description: # -------------------------
                     # This is a FLAIR
                     datatype = 'anat'
                     modstr = '_FLAIR'
                     
-                # ===== FIELDMAPS =================================================
+                # ===== FIELDMAPS =============================================
                     
-                elif 'fieldmapping' in series_description: # --------------
+                elif 'fieldmapping' in series_description: # ------------------
                     # These are distortion correction scans
                     datatype = 'fmap'
                     if   'M' in J['ImageType']:
@@ -320,7 +322,8 @@ if args.dirin != None:
                         modstr     = '_phasediff'
                     B0_identifier = 'fieldmapping'
                     
-                elif 'topup' in series_description: # --------------
+                elif 'topup' in series_description and \
+                     'bold'  in series_description: # -------------------------
                     datatype  = 'fmap'
                     modstr    = '_epi'
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
@@ -335,7 +338,7 @@ if args.dirin != None:
                     B0_identifier = 'fmri_topup'
                     
                 elif 'diffmb32mmb00'   in series_description or \
-                     'diffmb32mmb0180' in series_description: # --------------
+                     'diffmb32mmb0180' in series_description: # ---------------
                     datatype  = 'fmap'
                     modstr    = '_epi'
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
@@ -350,7 +353,7 @@ if args.dirin != None:
                     B0_identifier = 'dwi_topup'
 
                 elif 'diffmb12mmb00'   in series_description or \
-                     'diffmb12mmb0180' in series_description: # --------------
+                     'diffmb12mmb0180' in series_description: # ---------------
                     datatype  = 'fmap'
                     modstr    = '_epi'
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
@@ -364,9 +367,9 @@ if args.dirin != None:
                     dirstr = '_dir-{}'.format(PEdir)
                     B0_identifier = 'dwi_topup'
 
-                # ===== RESTING STATE =============================================
+                # ===== RESTING STATE =========================================
                 
-                elif 'boldepi128' in series_description: # ---------
+                elif 'boldepi128' in series_description: # --------------------
                     # This is resting state FMRI 
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -374,7 +377,7 @@ if args.dirin != None:
                     multi_echo = False
                     B0_source  = 'fieldmapping'
                 
-                elif 'ep2dboldlong' in series_description: # ---------
+                elif 'ep2dboldlong' in series_description: # ------------------
                     # This is resting state FMRI 
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -382,7 +385,7 @@ if args.dirin != None:
                     multi_echo = False
                     B0_source  = 'fieldmapping'
                     
-                elif 'ep2dbold' in series_description: # ---------
+                elif 'ep2dbold' in series_description: # ----------------------
                     # This is resting state FMRI 
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -390,7 +393,7 @@ if args.dirin != None:
                     multi_echo = False
                     B0_source  = 'fieldmapping'
                 
-                elif 'mocoseries' == series_description: # ---------
+                elif 'mocoseries' == series_description: # --------------------
                     # This is resting state FMRI, motion corrected 
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -399,7 +402,7 @@ if args.dirin != None:
                     multi_echo = False
                     B0_source  = 'fieldmapping'
                 
-                elif 'boldcheck' in series_description: # ---------
+                elif 'boldcheck' in series_description: # ---------------------
                     # This is resting state FMRI (IGAB) SBREF?
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -408,7 +411,7 @@ if args.dirin != None:
                     acqstr     = '_acq-check'
                     B0_source  = 'fieldmapping'
                     
-                elif 'boldmb324mm' in series_description: # ---------
+                elif 'boldmb324mm' in series_description: # -------------------
                     # This is resting state FMRI (IGAB)
                     datatype   = 'func'
                     modstr     = '_bold'
@@ -416,10 +419,10 @@ if args.dirin != None:
                     multi_echo = False
                     B0_source  = 'fieldmapping'
                     
-                # ===== DIFFUSION =================================================
+                # ===== DIFFUSION =============================================
                 
                 elif series_description.endswith('highresdti') or \
-                     series_description.endswith('diffusionhighres'): # -----------------------------
+                     series_description.endswith('diffusionhighres'): # -------
                     # This is diffusion
                     datatype   = 'dwi'
                     modstr     = '_dwi'
@@ -428,7 +431,7 @@ if args.dirin != None:
                     B0_source  = None
                     
                 elif 'diffmb32mmb700064' == series_description or \
-                     'diffmb12mmb700064' == series_description: # -----------------------------
+                     'diffmb12mmb700064' == series_description: # -------------
                     # This is diffusion
                     datatype   = 'dwi'
                     modstr     = '_dwi'
@@ -436,7 +439,7 @@ if args.dirin != None:
                     multi_echo = False
                     B0_source  = 'dwi_topup'
                 
-                else: # -----------------------------------------------------------
+                else: # -------------------------------------------------------
                     print('Skipping: {}{} ({})'.format(oldfnam, fext, series_description))
                     datatype   = 'unknown'
                     modstr     = '_unknown'
