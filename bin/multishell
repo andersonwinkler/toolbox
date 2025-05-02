@@ -691,7 +691,10 @@ def scale_vectors(vectors, bvalues): #=========================================
     each direction, just a maximum bvalue (e.g., Siemens, GE).
     '''
     bmax    = bvalues.max()
-    vectors = np.sqrt(bvalues/bmax)*vectors
+    if bmax == 0:
+        vectors = np.full(vectors.shape,0)
+    else:
+        vectors = np.sqrt(bvalues/bmax)*vectors
     return vectors
 
 def unscale_vectors(vectors, bmax): #==========================================
@@ -853,9 +856,9 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
 
     # Custom colormap . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if 'multishell' not in plt.colormaps():
-        colors = [(.80, 0, 0),
-                  (0, .50, 0),
-                  (0, 0, .75)]
+        colors = [(1.0, 0, 0),
+                  (0, 0.9, 0),
+                  (0, 0, 1.0)]
         cmap = mcolors.LinearSegmentedColormap.from_list('multishell', colors, N=2**10)
         matplotlib.colormaps.register(cmap)
     cmap   = plt.get_cmap('multishell')
@@ -967,11 +970,11 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
 
     # Colorbar  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if   colorby == 'shell':
-        label = 'Shell'
+        label = 'Shell number'
         ticks = uCidx
         ticklabels = [f'{c:.0f}' for c in uCidx]
     elif colorby == 'acquisition':
-        label = 'Acquisition'
+        label = 'Acquisition order'
         ticks = np.linspace(1,K,3)
         ticklabels = [f'{c:.0f}' for c in (1,(1+K)/2,K)]
     if style == 'points':
