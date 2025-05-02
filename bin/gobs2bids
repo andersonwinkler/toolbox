@@ -349,6 +349,21 @@ if args.dirin != None:
                     dirstr = '_dir-{}'.format(PEdir)
                     B0_identifier = 'dwi_topup'
 
+                elif 'diffmb12mmb00'   in series_description or \
+                     'diffmb12mmb0180' in series_description: # --------------
+                    datatype  = 'fmap'
+                    modstr    = '_epi'
+                    J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
+                    PEdir = J['PhaseEncodingDirection']
+                    if   PEdir.endswith('-'):
+                        PEdir = PEdir.replace('-','neg')
+                    elif PEdir.endswith('+'):
+                        PEdir = PEdir.replace('+','pos')
+                    else:
+                        PEdir = PEdir + 'pos'
+                    dirstr = '_dir-{}'.format(PEdir)
+                    B0_identifier = 'dwi_topup'
+
                 # ===== RESTING STATE =============================================
                 
                 elif 'boldepi128' in series_description: # ---------
@@ -427,6 +442,7 @@ if args.dirin != None:
                     modstr     = '_unknown'
                     taskstr    = ''
                     multi_echo = False
+                    raise
                 
                 # For multi-echo data, get the echo time
                 if datatype == 'func' and multi_echo and echo_time != '':
