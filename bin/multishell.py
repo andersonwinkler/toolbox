@@ -61,12 +61,12 @@ Options:
     Create a new set of directions using the specified method ('simultaneous'
     or 'incremental'). Provide either:
     - <Ks>: a list of integers, e.g., "[10,20,30]", specifying directions per shell.
-    - <K>: total directions, <S>: number of shells, <distr>: "uniform", "linear", or "quadratic".
+    - <K>: total directions, <S>: number of shells, <distr>: 'uniform', 'linear', or 'quadratic'.
     The <distr> parameter specifies if the total number of shells should be
     distributed uniformly across shells, or linearly as a function of the shell
     number, or quadratically as a function of the shell number.
     Examples:
-    --new simultaneous "[10,20,30]"
+    --new simultaneous '[10,20,30]'
     --new incremental 60 3 linear
 
 --alpha <value>
@@ -83,7 +83,7 @@ Options:
     Optimally reorder directions.
 
 --bvalues <list>
-    Specify b-values for shells, e.g., "[1000,2000,3000]". This is needed if
+    Specify b-values for shells, e.g., '[1000,2000,3000]'. This is needed if
     creating new schemes and saving to a file format that will be used in the
     scanner. Do not include here bvalues=0; use --addb0 for that.
 
@@ -569,7 +569,7 @@ def directions_per_shell(K, S, distrib='linearly'): # =========================
     shells), linearly distributed (linearly more as we move to outer shells),
     or quadratically distributed (quadratically more as we move to outer shells).
     '''
-    if   distrib in [0, 'uniform', 'evenly', 'constant', 'constantly']:
+    if   distrib in [0, 'uniform', 'uniformly', 'evenly', 'constant', 'constantly']:
         Ps = np.ones(S)
     elif distrib in [1, 'lin', 'linear', 'linearly']:
         Ps = np.arange(1,S+1, dtype=float)
