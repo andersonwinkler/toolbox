@@ -679,6 +679,9 @@ if __name__ == "__main__":
     print('Computing composite curvatures from the principal curvatures')
     curvs = calc_composites(curvs)
     
+    # Include Voronoi areas in the set, so it's easier to save
+    curvs['varea'] = vorv
+    
     # Save results
     print('Saving results with prefix: {}'.format(args.outprefix))
     if args.outtype.lower() == 'asc' or args.outtype.lower() == 'dpv':
