@@ -16,6 +16,9 @@ from shutil import copyfile
 from natsort import natsorted, ns
 import nibabel as nib
 import re
+import hashlib
+import string
+import random
 
 def printHelp(argv, description): # ===========================================
 
@@ -34,7 +37,7 @@ def printHelp(argv, description): # ===========================================
     print("Anderson M. Winkler")
     print("UTRGV")
     print("First version: Sep/2020")
-    print("This version:  Feb/2023")
+    print("This version:  May/2025")
     print("http://brainder.org")
     exit(1)
     
@@ -64,7 +67,8 @@ def readjson(jsonfile): # =====================================================
     return J
 
 def writejson(J, jsonfile): # =================================================
-    link2copy(jsonfile)
+    if os.path.exists(jsonfile):
+        link2copy(jsonfile)
     with open(jsonfile, 'w') as fp:
         json.dump(J, fp, indent=2)
     return
@@ -133,20 +137,32 @@ def cleanentity(curdir, f, entity='run'): # ==================================
     newfile = os.path.join(curdir, newfnam + fext)
     return oldfile, newfile
 
-def swapfields(json): # =======================================================
-    J = readjson(json)
-    if J['Modality'] == 'MR' and J['Manufacturer'] == 'GE':
-        tmp = J['SeriesDescription']
-        J['SeriesDescription'] = J['ProtocolName']
-        J['ProtocolName'] = tmp
-        writejson(J, json)
-    return
+def studyincomments(jsonfile, studynam): # ====================================
+    J = readjson(jsonfile)
+    if 'ImageComments' in J and 'Session:' in J['ImageComments']:
+        if not J['ImageComments'].endswith(studynam):
+            tok = J['ImageComments'].split(';')
+            for i,t in enumerate(tok):
+                if t.startswith('Session:'):
+                    tok[i] = 'Session:{}'.format(studynam)
+            J['ImageComments'] = ';'.join(tok)
+            writejson(J, jsonfile)
+    return J
 
+def md5file(filepath): # ======================================================
+    with open(filepath, 'rb') as f:
+        return hashlib.md5(f.read()).hexdigest()
+
+def random_string(k=10): # ==================================================
+    chars = string.ascii_letters + string.digits  # A-Z, a-z, 0-9
+    return ''.join(random.choice(chars) for _ in range(k))
 # =============================================================================
 #   MAIN FUNCTION
 # =============================================================================
 
 # Parse arguments
+#argv = './gobs2bids.py -n dups_nidb -b dups_bids'.split(' ')
+#args = parseArguments(argv)
 args = parseArguments(sys.argv)
 
 # Note that dirin (-n nidbdir) is optional. If not supplied, and if the BIDS
@@ -198,10 +214,6 @@ if args.dirin != None:
             isfbids, oldfnam, fext = isbidsfile(f)
             if isfbids and fext == '.json':
                 
-                # Take this opportunity to ensure it's a real copy (not a hard link),
-                # and swap ProtocolName and SeriesDescription (an issue with GE only).
-                swapfields(os.path.join(args.dirout, f))
-                
                 # This is the NIDB ID and a few other info, from the file names:
                 nidb_id, studynum, seriesnum, serialnum = oldfnam.split('_')
                 studynam = ''
@@ -215,7 +227,8 @@ if args.dirin != None:
                 if studynum not in D[nidb_id]:
                     D[nidb_id][studynum] = pd.DataFrame(columns=[
                             'nidb_id','studynam','seriesnum','serialnum','series_description',
-                            'acquisition_date','acquisition_time','echo_time','newfnam','datatype'])
+                            'acquisition_date','acquisition_time','echo_time','newfnam','datatype',
+                            'B0_identifier','B0_source','img_md5','duplicated'])
         
                 # Start populating the fields
                 D[nidb_id][studynum].loc[oldfnam,'nidb_id']   = nidb_id # redundant but gives extra flexibility later
@@ -326,7 +339,6 @@ if args.dirin != None:
                      'bold'  in series_description: # -------------------------
                     datatype  = 'fmap'
                     modstr    = '_epi'
-                    J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     PEdir = J['PhaseEncodingDirection']
                     if   PEdir.endswith('-'):
                         PEdir = PEdir.replace('-','neg')
@@ -341,7 +353,6 @@ if args.dirin != None:
                      'diffmb32mmb0180' in series_description: # ---------------
                     datatype  = 'fmap'
                     modstr    = '_epi'
-                    J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     PEdir = J['PhaseEncodingDirection']
                     if   PEdir.endswith('-'):
                         PEdir = PEdir.replace('-','neg')
@@ -356,7 +367,6 @@ if args.dirin != None:
                      'diffmb12mmb0180' in series_description: # ---------------
                     datatype  = 'fmap'
                     modstr    = '_epi'
-                    J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     PEdir = J['PhaseEncodingDirection']
                     if   PEdir.endswith('-'):
                         PEdir = PEdir.replace('-','neg')
@@ -381,7 +391,7 @@ if args.dirin != None:
                     # This is resting state FMRI 
                     datatype   = 'func'
                     modstr     = '_bold'
-                    taskstr    = '_task-rest-long'
+                    taskstr    = '_task-longrest'
                     multi_echo = False
                     B0_source  = 'fieldmapping'
                     
@@ -451,6 +461,7 @@ if args.dirin != None:
                 if datatype == 'func' and multi_echo and echo_time != '':
                     echstr = '_echo-{}'.format(echo_time)
                 
+                # Populate the main dict for later
                 newfnam = '{}{}{}{}{}{}{}{}{}'.format(substr, sesstr, acqstr, taskstr, recstr, dirstr, runstr, echstr, modstr)
                 D[nidb_id][studynum].loc[oldfnam,'datatype']      = datatype
                 D[nidb_id][studynum].loc[oldfnam,'B0_identifier'] = B0_identifier
@@ -458,30 +469,49 @@ if args.dirin != None:
                 D[nidb_id][studynum].loc[oldfnam,'newfnam']       = newfnam
                 print('Provisional filenames: {} -> {}'.format(oldfnam, newfnam))
     
-    # Deal with phase/magnitude field maps duplicate files
+    # Ensure that studynam is correct in the json file. This helps to solve 
+    # issues with studies "corrected" in the scanner console and re-exported 
+    # to the database, sometimes creating duplicates with different study names
     for nidb_id in D:
         for studynum in D[nidb_id]:
-            indices = D[nidb_id][studynum].index.tolist()
-            newfname_orig = D[nidb_id][studynum]['newfnam'].copy()
+            for oldfnam in D[nidb_id][studynum].index.tolist():
+                studyincomments(os.path.join(curdir, '{}.json'.format(oldfnam)),
+                                D[nidb_id][studynum].loc[oldfnam,'studynam'])
+    
+    # Compute the hashes for the image files with duplicate names, to find duplicate images
+    for nidb_id in D:
+        for studynum in D[nidb_id]:
+            D[nidb_id][studynum]['duplicated'] = False
+            dupnames = D[nidb_id][studynum].duplicated(subset=['newfnam'], keep=False)
+            for oldfnam in D[nidb_id][studynum].index.tolist():
+                if dupnames[oldfnam]:
+                    print('Computing hash for: {}'.format(oldfnam))
+                    D[nidb_id][studynum].loc[oldfnam,'img_md5'] = md5file(os.path.join(curdir, '{}.nii.gz'.format(oldfnam)))
+                else:
+                    D[nidb_id][studynum].loc[oldfnam,'img_md5'] = random_string(k=10)
+            D[nidb_id][studynum]['duplicated'] = D[nidb_id][studynum].duplicated(subset=['img_md5'], keep='first')
+    
+    # Deal with magnitude fieldmap naming
+    for nidb_id in D:
+        for studynum in D[nidb_id]:
+            idxdup = D[nidb_id][studynum]['duplicated']
+            newfname_orig = D[nidb_id][studynum]['newfnam'][~idxdup].copy()
             mi = 1
-            for oldfnam in indices:
+            for oldfnam in D[nidb_id][studynum][~idxdup].index.tolist():
+                ma = sum(newfname_orig == D[nidb_id][studynum].loc[oldfnam,'newfnam'])
                 if D[nidb_id][studynum].loc[oldfnam,'newfnam'].endswith('_magnitude'):
-                    ma = sum(newfname_orig == D[nidb_id][studynum].loc[oldfnam,'newfnam'])
-                    if ma == 2:
-                        D[nidb_id][studynum].loc[oldfnam,'newfnam'] = D[nidb_id][studynum].loc[oldfnam,'newfnam'] + '{}'.format(mi)
-                    elif ma == 4 and (mi == 2 or mi == 4):
-                        D[nidb_id][studynum].loc[oldfnam,'newfnam'] = None
-                    mi = mi + 1
+                    D[nidb_id][studynum].loc[oldfnam,'newfnam'] = D[nidb_id][studynum].loc[oldfnam,'newfnam'] + '{}'.format(mi)
+                    mi += 1
                     if mi == ma + 1:
                         mi = 1
-        
-    # Deal with the rare cases of identical new filenames
+
+    # Deal with identical new filenames
     for nidb_id in D:
         for studynum in D[nidb_id]:
-            indices = D[nidb_id][studynum].index.tolist()
-            newfname_orig = D[nidb_id][studynum]['newfnam'].copy()
+            idxdup = D[nidb_id][studynum]['duplicated']
+            newfname_orig = D[nidb_id][studynum]['newfnam'][~idxdup].copy()
             mi = 1
-            for oldfnam in indices:
+            for oldfnam in D[nidb_id][studynum][~idxdup].index.tolist():
                 ma = sum(newfname_orig == D[nidb_id][studynum].loc[oldfnam,'newfnam'])
                 if ma > 1:
                     tok = D[nidb_id][studynum].loc[oldfnam,'newfnam'].split('_')
@@ -495,9 +525,9 @@ if args.dirin != None:
     # Add EchoTime1 and EchoTime2 to the phasediff field maps
     for nidb_id in D:
         for studynum in D[nidb_id]:
-            indices = D[nidb_id][studynum].index.tolist()
+            idxdup = D[nidb_id][studynum]['duplicated']
             EchoTimes = {}
-            for oldfnam in indices:
+            for oldfnam in D[nidb_id][studynum][~idxdup].index.tolist():
                 if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'fmap' and \
                     D[nidb_id][studynum].loc[oldfnam,'newfnam'] != None and \
                     re.search(r'_magnitude\d$', D[nidb_id][studynum].loc[oldfnam,'newfnam']):
@@ -512,43 +542,41 @@ if args.dirin != None:
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
                     EchoTimes = {}
                     
-    # Sort out the fieldmaps (add B0Field* and IntendedFor fieldsto the JSON)
+    # Sort out the fieldmaps (add B0Field* and IntendedFor fields to the JSON)
     for nidb_id in D:
         for studynum in D[nidb_id]:
-            for oldfnam in D[nidb_id][studynum].index.tolist():
+            idxdup = D[nidb_id][studynum]['duplicated']
+            for oldfnam in D[nidb_id][studynum][~idxdup].index.tolist():
                 
                 # Field maps proper (B0FieldIdentifier)
-                if D[nidb_id][studynum].loc[oldfnam,'B0_identifier'] != '':
+                if D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_identifier'] != '':
                     print('Adding B0FieldIdentifier and IntendedFor to: {}'.format('{}.json'.format(oldfnam)))
-                    idx = D[nidb_id][studynum].loc[:,'B0_source'] == D[nidb_id][studynum].loc[oldfnam,'B0_identifier']
+                    idx = D[nidb_id][studynum][~idxdup].loc[:,'B0_source'] == D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_identifier']
                     intendedfor = []
-                    for newfnam in D[nidb_id][studynum].loc[idx,'newfnam']:
+                    for newfnam in D[nidb_id][studynum][~idxdup].loc[idx,'newfnam']:
                         bids_path = os.path.join(newfnam.split('_')[0],
-                                                 'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']), 
-                                                 D[nidb_id][studynum].loc[oldfnam,'datatype'], 
+                                                 'ses-{}'.format(D[nidb_id][studynum][~idxdup].loc[oldfnam,'acquisition_date']), 
+                                                 D[nidb_id][studynum][~idxdup].loc[oldfnam,'datatype'], 
                                                  '{}.nii.gz'.format(newfnam))
                         intendedfor.append('bids::{}'.format(bids_path))
                     intendedfor.sort()
-                    link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     if 'IntendedFor' in J:
                         J['IntendedFor']   = J['IntendedFor'] + intendedfor
                     else:
                         J['IntendedFor']   = intendedfor
                     J['IntendedFor']       = list(set(J['IntendedFor']))
-                    J['B0FieldIdentifier'] = D[nidb_id][studynum].loc[oldfnam,'B0_identifier']
+                    J['B0FieldIdentifier'] = D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_identifier']
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
                     
                 # Images that use the field maps as source
-                if D[nidb_id][studynum].loc[oldfnam,'B0_source'] != '':
+                if D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_source'] != '':
                     print('Adding B0FieldSource to: {}'.format('{}.json'.format(oldfnam)))
-                    link2copy(os.path.join(curdir, '{}.json'.format(oldfnam)))
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
-                    J['B0FieldSource'] = D[nidb_id][studynum].loc[oldfnam,'B0_source']
+                    J['B0FieldSource'] = D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_source']
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
-
-                    
-    # Rename the files, from the NIDB names to BIDS names.
+    
+    # Rename the files, from the NIDB names to BIDS names, delete duplicates.
     for nidb_id in D:
         for studynum in D[nidb_id]:
             for oldfnam in D[nidb_id][studynum].index:
@@ -559,16 +587,19 @@ if args.dirin != None:
                 for iext in ['.json', '.nii.gz', '.bvec', '.bval', '.tsv']:
                     oldfile = os.path.join(args.dirout, '{}{}'.format(oldfnam, iext))
                     if os.path.isfile(oldfile):
-                        newfile = os.path.join(args.dirout, 
-                                                'sub-{}'.format(sub_id),
-                                                'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']),
-                                                D[nidb_id][studynum].loc[oldfnam,'datatype'],
-                                                '{}{}'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'], iext))
-                        newdir, newname = os.path.split(newfile)
-                        if not os.path.isdir(newdir):
-                            os.makedirs(newdir)
-                        print('Renaming: {} -> {}'.format(oldfile, newfile))
-                        os.rename(oldfile, newfile)
+                        if D[nidb_id][studynum].loc[oldfnam,'duplicated']:
+                            os.remove(oldfile)
+                        else:
+                            newfile = os.path.join(args.dirout, 
+                                                    'sub-{}'.format(sub_id),
+                                                    'ses-{}'.format(D[nidb_id][studynum].loc[oldfnam,'acquisition_date']),
+                                                    D[nidb_id][studynum].loc[oldfnam,'datatype'],
+                                                    '{}{}'.format(D[nidb_id][studynum].loc[oldfnam,'newfnam'], iext))
+                            newdir, newname = os.path.split(newfile)
+                            if not os.path.isdir(newdir):
+                                os.makedirs(newdir)
+                            print('Renaming: {} -> {}'.format(oldfile, newfile))
+                            os.rename(oldfile, newfile)
 
 # Renumber ses, run, echo, to 1, 2, 3, etc.
 # This part will only run if the "-r" option is given
@@ -654,4 +685,11 @@ if args.renumber:
                     writejson(J, os.path.join(curdir, f))
     else:
         print('Error: BIDS directory does not exist: {}'.format(args.dirout))
-        exit()
+        sys.exit(1)
+
+# Write dataset_description.json
+J = { 'Name':'GOBS',
+      'BIDSVersion': '1.0.0'}
+writejson(J, os.path.join(args.dirout,'dataset_description.json'))
+print('Finished.')
+sys.exit(0)
