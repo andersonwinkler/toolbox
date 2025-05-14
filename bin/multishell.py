@@ -825,11 +825,15 @@ def northern_hemisphere(vtx, fac): # ==========================================
     newfac = newidx[fidx]
     return newvtx, newfac
 
-def plot_directions(vectors, shells, filename=None, colorby='shell',
+def plot_directions(vectors, shells=None, bvalues=None, 
+                    filename=None, colorby='shell', sphere='uv',
                     style='quiver', reproject=False): # =======================
     """
-    Plot a multishell direction scheme with geodesic spheres for each shell.
-    'style' can be 'quiver' for arrows or 'points' for scatter plot.
+    Plot a multishell with hemispheres for each shell or or qspace direction
+    scheme. 'style' can be 'quiver' for arrows, 'points' for scatter, 'blobs'
+    for little circles representing each direction, 'rings' for the circles
+    without filling, or 'qspace' for a scatter in the cartesian coordinate
+    system.
     """
     import matplotlib
     import matplotlib.pyplot as plt
@@ -842,18 +846,31 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
         matplotlib.use('agg')  # Force Agg backend, override existing
     
     # Here we want the shell indices to start at 1
-    shells = shells - shells.min() + 1
-    uS = np.unique(shells)
-    S  = len(uS)
-    K  = len(vectors)
+    if shells is None and bvalues is not None:
+        if not reproject:
+            vectors = scale_vectors(vectors, bvalues)
+        _, shells = np.unique(bvalues, return_inverse=True)
+        shells    = shells + 1
+        bmax      = bvalues.max()
+        bvalues1  = bvalues / bmax # scaled to between 0 and 1
+    elif shells is not None and bvalues is None:
+        shells    = shells - shells.min() + 1
+        bmax      = None
+        bvalues1  = shells / shells.max() # fake b-values, and scaled to between 0 and 1
+        if not reproject:
+            vectors = vectors * shells/shells.max()
+    else:
+        raise ValueError('Must provide either "shells" or "bvalues", not both')
+    uB1 = np.unique(bvalues1)
+    uS  = np.unique(shells)
+    S   = len(uS)
+    K   = len(vectors)
 
     # We only need one hemisphere of the shells; let's flip so that they
     # are all on the +z hemisphere, i.e., above the "equator".
     idx = vectors[:,2] < 0
     vectors[idx] = -vectors[idx]
-    if not reproject:
-        vectors = vectors * shells/S  # scale vectors by shell values
-
+    
     # Custom colormap . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if 'multishell' not in plt.colormaps():
         colors = [(.95, .05, .05),
@@ -880,16 +897,25 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
     # Set up axes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     fig = plt.figure(figsize=(10, 8))
     ax  = fig.add_subplot(111, projection='3d')
-    ax.grid(False)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_zticks([])
-    ax.xaxis.pane.set_alpha(0)
-    ax.yaxis.pane.set_alpha(0)
-    ax.zaxis.pane.set_alpha(0)
-    ax.xaxis.line.set_visible(False)
-    ax.yaxis.line.set_visible(False)
-    ax.zaxis.line.set_visible(False)
+    if style == 'qspace':
+        ax.grid(True)
+        ax.xaxis.pane.set_alpha(.5)
+        ax.yaxis.pane.set_alpha(.5)
+        ax.zaxis.pane.set_alpha(.5)
+        ax.xaxis.line.set_visible(True)
+        ax.yaxis.line.set_visible(True)
+        ax.zaxis.line.set_visible(True)
+    else:
+        ax.grid(False)
+        ax.xaxis.pane.set_alpha(0)
+        ax.yaxis.pane.set_alpha(0)
+        ax.zaxis.pane.set_alpha(0)
+        ax.xaxis.line.set_visible(False)
+        ax.yaxis.line.set_visible(False)
+        ax.zaxis.line.set_visible(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
     ax.set_xlim(-1,1)
     ax.set_ylim(-1,1)
     ax.set_zlim(0,1) 
@@ -900,12 +926,19 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
     if style == 'points':
         sc = ax.scatter(vectors[:,0], vectors[:,1], vectors[:,2], 
                         c=Cidx.ravel(order='C'), cmap=cmap, norm=norm, alpha=1, s=5)
+    elif style == 'qspace':
+        sphere = None
+        sc = ax.scatter(vectors[:,0], vectors[:,1], vectors[:,2], 
+                        c=Cidx.ravel(order='C'), cmap=cmap, norm=norm, alpha=1, s=5)
     elif style == 'quiver':
         for i, vec in enumerate(vectors):
             if reproject:
                 arrow_length_ratio = .1
             else:
-                arrow_length_ratio = .1*S/shells[i]
+                if bvalues is None:
+                    arrow_length_ratio = .1/bvalues1[i]
+                else:
+                    arrow_length_ratio = .1/np.sqrt(bvalues1[i])
             ax.quiver(0, 0, 0, vec[0], vec[1], vec[2], 
                       color=cmap(norm(Cidx[i])), alpha=1, linewidth=1.5,
                       arrow_length_ratio=arrow_length_ratio)
@@ -914,7 +947,10 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
             if reproject:
                 r = 0.05
             else:
-                r = .05 * shells[i]/S
+                if bvalues is None:
+                    r = 0.05 * bvalues1[i]
+                else:
+                    r = 0.05 * np.sqrt(bvalues1[i])
             ref   = np.zeros(3, dtype=float)
             ref[np.argmin(np.abs(vec))] = 1.0
             u     = np.cross(vec, ref)
@@ -930,7 +966,10 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
             if reproject:
                 r = 0.05
             else:
-                r = .05 * shells[i]/S
+                if bvalues is None:
+                    r = 0.05 * bvalues1[i]
+                else:
+                    r = 0.05 * np.sqrt(bvalues1[i])
             ref   = np.zeros(3, dtype=float)
             ref[np.argmin(np.abs(vec))] = 1.0
             u     = np.cross(vec, ref)
@@ -942,31 +981,37 @@ def plot_directions(vectors, shells, filename=None, colorby='shell',
             ax.add_collection(art3d.Poly3DCollection(circle[None,:], facecolors=cmap(norm(Cidx[i])), linewidth=0))
         ax.view_init(elev=90, azim=0)
     else:
-        raise ValueError("Style must be 'points' or 'quiver', 'rings', or 'blobs'.")
+        raise ValueError("Style must be 'points', 'quiver', 'rings', 'blobs', or 'qspace'.")
     
     # Reference sphere  . . . . . . . . . . . . . . . . . . . . . . . . . . . .
-    #vtx, fac = geodesic_sphere(n=2)
-    vtx, fac = uv_sphere(nlat=40, nlon=80) # choose an even number for nlat, otherwise the north hemi will be incomplete near the equator
-    vtx, fac = northern_hemisphere(vtx,fac)
-    edg = set()
-    for f in fac:
-        edg.update([(min(a,b), max(a,b)) for a, b in zip(f, np.roll(f,-1))])
-    for shell in uS:
-        if reproject:
-            svtx = vtx
-        else:
-            svtx = vtx * shell/S
-        tri = [svtx[f,:] for f in fac]
-        poly = Poly3DCollection(tri, facecolors='gray', edgecolors='none', alpha=0.1)
-        ax.add_collection3d(poly)
-        x, y, z = [], [], []
-        for i, j in edg:
-            x.extend([svtx[i,0], svtx[j,0], np.nan])
-            y.extend([svtx[i,1], svtx[j,1], np.nan])
-            z.extend([svtx[i,2], svtx[j,2], np.nan])
-        ax.plot(x, y, z, color='gray', alpha=0.1, linewidth=0)
-        if reproject:
-            break
+    if sphere is not None:
+        if sphere in ['geo', 'geodesic']:
+            vtx, fac = geodesic_sphere(n=2)
+        elif sphere in ['uv', 'latlong']:
+            vtx, fac = uv_sphere(nlat=40, nlon=80) # choose an even number for nlat, otherwise the north hemi will be incomplete near the equator
+            vtx, fac = northern_hemisphere(vtx,fac)
+            edg = set()
+            for f in fac:
+                edg.update([(min(a,b), max(a,b)) for a, b in zip(f, np.roll(f,-1))])
+            for b1 in uB1:
+                if reproject:
+                    svtx = vtx
+                else:
+                    if bvalues is None:
+                        svtx = vtx * b1
+                    else:
+                        svtx = vtx * np.sqrt(b1)
+                tri = [svtx[f,:] for f in fac]
+                poly = Poly3DCollection(tri, facecolors='gray', edgecolors='none', alpha=0.1)
+                ax.add_collection3d(poly)
+                x, y, z = [], [], []
+                for i, j in edg:
+                    x.extend([svtx[i,0], svtx[j,0], np.nan])
+                    y.extend([svtx[i,1], svtx[j,1], np.nan])
+                    z.extend([svtx[i,2], svtx[j,2], np.nan])
+                ax.plot(x, y, z, color='gray', alpha=0.1, linewidth=0)
+                if reproject:
+                    break
 
     # Colorbar  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
     if   colorby == 'shell':
