@@ -149,13 +149,22 @@ def studyincomments(jsonfile, studynam): # ====================================
             writejson(J, jsonfile)
     return J
 
+def addtotalreadouttime(jsonfile): # ==========================================
+    J = readjson(jsonfile)
+    if 'TotalReadOutTime' not in J:
+        J['TotalReadOutTime'] = J['VendorReportedEchoSpacing'] * \
+            (J['AcquisitionMatrixPE']/J['ParallelReductionFactorInPlane'] - 1)
+    writejson(J, jsonfile)
+
 def md5file(filepath): # ======================================================
     with open(filepath, 'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
 
-def random_string(k=10): # ==================================================
+def random_string(k=10): # ====================================================
     chars = string.ascii_letters + string.digits  # A-Z, a-z, 0-9
     return ''.join(random.choice(chars) for _ in range(k))
+
+
 # =============================================================================
 #   MAIN FUNCTION
 # =============================================================================
@@ -168,7 +177,16 @@ args = parseArguments(sys.argv)
 # Note that dirin (-n nidbdir) is optional. If not supplied, and if the BIDS
 # directory exists and -r was supplied, it will renumber entities in the bidsdir.
 if args.dirin != None:
+    
+    # Create output directory if it does not exist
+    if os.path.isdir(args.dirout):
+        print('Error: Output directory already exists: {}'.format(args.dirout))
+        sys.exit()
+    else:
+        os.makedirs(args.dirout)
+    
     # Get a mapping between NIDB UID and AltUIDs
+    print('Mapping between NIDB UID and AltUIDs')
     slist = next(os.walk(args.dirin))[1]
     slist.sort()
     altuid = []
@@ -180,13 +198,6 @@ if args.dirin != None:
                 if nid not in nidb:
                     nidb.append(nid)
                     altuid.append(sid)
-    
-    # Create output directory if it does not exist
-    if os.path.isdir(args.dirout):
-        print('Error: Output directory already exists: {}'.format(args.dirout))
-        sys.exit()
-    else:
-        os.makedirs(args.dirout)
     
     # Populate output directory with hard links to the original files
     S = pd.DataFrame(columns=['olddir'])
@@ -469,14 +480,19 @@ if args.dirin != None:
                 D[nidb_id][studynum].loc[oldfnam,'newfnam']       = newfnam
                 print('Provisional filenames: {} -> {}'.format(oldfnam, newfnam))
     
-    # Ensure that studynam is correct in the json file. This helps to solve 
-    # issues with studies "corrected" in the scanner console and re-exported 
-    # to the database, sometimes creating duplicates with different study names
+    # Make small edits to the json files:
+    # 1) Ensure that studynam is correct in the json file. This helps to solve 
+    #    issues with studies "corrected" in the scanner console and re-exported 
+    #    to the database, sometimes creating duplicates with different study names
+    # 2) For BOLD scans, ensure TotalReadOutTime is present
+    print('Making small edits or additions to json files (not altering original files)')
     for nidb_id in D:
         for studynum in D[nidb_id]:
             for oldfnam in D[nidb_id][studynum].index.tolist():
                 studyincomments(os.path.join(curdir, '{}.json'.format(oldfnam)),
                                 D[nidb_id][studynum].loc[oldfnam,'studynam'])
+                if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'func':
+                    addtotalreadouttime(os.path.join(curdir, '{}.json'.format(oldfnam)))
     
     # Compute the hashes for the image files with duplicate names, to find duplicate images
     for nidb_id in D:
