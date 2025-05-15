@@ -78,7 +78,6 @@ Options:
     Load scheme from file in specified format ('fsl', 'mrtrix3', 'siemens',
     'ge', 'philips', 'caruyer'). For 'siemens' and 'ge', provide --bmax.
 
-
 --reorder
     Optimally reorder directions.
 
@@ -1294,8 +1293,8 @@ if __name__ == "__main__":
     # Ensure bvalues is a column vector, count number of shells . . . . . . . .
     if state['bvalues'] is not None:
         if type(state['bvalues']) is list:
-            state['bvalues'] = np.array(state['bvalues'])
-            state['bvalues'] = state['bvalues'][state['shells'][:,0]][:,None]
+            state['bvalues']   = np.array(state['bvalues'])
+            state['bvalues']   = state['bvalues'][state['shells'][:,0]][:,None]
     state['S'] = len(np.unique(state['shells'][:,0]))
     
     # Optimally reorder the directions if asked . . . . . . . . . . . . . . . .
@@ -1426,29 +1425,46 @@ if __name__ == "__main__":
             Reproject = (False, True)
 
         # Make the figures for the interactive or save mode
+        # In the interactive mode, the user saves through the plot window
+        # In the non-interactive mode, the images are saved as is
+        # If bvalues are available, directions and shells are scaled according
+        # to the bvalues. Otherwise, they are scaled proportionally to 1, 2, 3, etc.
         if state['plotformat'] == 'interactive':
-            # In the interactive mode, the user saves through the plot window
             print('Plotting directions in interactive mode')
             for style in ['quiver', 'blobs']:
                 for reproject in Reproject:
                     for colorby in ('shell','acquisition'):
-                        plot_directions(state['vectors'][bidx],
-                                        state['shells'][bidx],
-                                        style=style,
-                                        colorby=colorby,
-                                        reproject=reproject)
+                        if state['bvalues'] is None:
+                            plot_directions(state['vectors'][bidx],
+                                            shells    = state['shells'][bidx],
+                                            style     = style,
+                                            colorby   = colorby,
+                                            reproject = reproject)
+                        else:
+                             plot_directions(state['vectors'][bidx],
+                                             bvalues   = state['bvalues'][bidx],
+                                             style     = style,
+                                             colorby   = colorby,
+                                             reproject = reproject)   
         else:
-            # In the non-interactive mode, the images are saved as is
             print('Plotting directions and saving image filesas: {}-*.{}'.format(state['outprefix'], state['plotformat']))
             for style in ['quiver', 'blobs']:
                 for reproject in Reproject:
                     for colorby in ('shell','acquisition'):
                         filename = '{}-{}-reproj{}-colorby{}.{}'.format(state['outprefix'], style, reproject, colorby, state['plotformat'])
-                        plot_directions(state['vectors'][bidx],
-                                        state['shells'][bidx],
-                                        filename=filename,
-                                        colorby=colorby,
-                                        style=style,
-                                        reproject=reproject)
+                        if state['bvalues'] is None:
+                            plot_directions(state['vectors'][bidx],
+                                            shells    = state['shells'][bidx],
+                                            filename  = filename,
+                                            colorby   = colorby,
+                                            style     = style,
+                                            reproject = reproject)
+                        else:
+                            plot_directions(state['vectors'][bidx],
+                                            bvalues   = state['bvalues'][bidx],
+                                            filename  = filename,
+                                            colorby   = colorby,
+                                            style     = style,
+                                            reproject = reproject)
     print('Done!')
     sys.exit(0)
