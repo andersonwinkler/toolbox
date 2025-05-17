@@ -1,0 +1,33 @@
+#!/bin/csh
+
+# Define the Octave executable
+#set OCTAVEBIN = "/usr/bin/octave"
+#set OCTAVEBIN = "flatpak run org.octave.Octave"
+set OCTAVEBIN = "flatpak run --user org.octave.Octave"
+
+# Check if FS is defined
+if ( ! ${?FREESURFER_HOME} ) then
+    echo "Variable FREESURFER_HOME not defined. You must configure FreeSurfer first."
+    exit 1
+endif
+
+# Define preamble commands for Octave
+set PRECMD = "addpath('${FREESURFER_HOME}/matlab') ; pkg load image ; more off ;"
+
+# Do the work
+if ( -p /dev/stdin ) then
+    # Case from stdin
+    # Read stdin into a variable
+    set CMD = `cat`
+    echo "${OCTAVEBIN} --eval '${PRECMD} ${CMD}'"
+else if ( ${#argv} == 0 ) then
+    # Case with no arguments
+    # Return full path to this script
+    set THISDIR = `dirname ${0}`
+    set THISPATH = `cd ${THISDIR} && pwd`/`basename ${0}`
+    echo ${THISPATH}
+else
+    # Case with arguments
+    # Pass them to Octave with PRECMD
+    echo "${OCTAVEBIN} --eval '${PRECMD} ${argv}'"
+endif

@@ -151,10 +151,27 @@ def studyincomments(jsonfile, studynam): # ====================================
 
 def addtotalreadouttime(jsonfile): # ==========================================
     J = readjson(jsonfile)
-    if 'TotalReadOutTime' not in J:
-        J['TotalReadOutTime'] = J['VendorReportedEchoSpacing'] * \
-            (J['AcquisitionMatrixPE']/J['ParallelReductionFactorInPlane'] - 1)
-    writejson(J, jsonfile)
+    if 'TotalReadoutTime' not in J:
+        if 'VendorReportedEchoSpacing' in J:
+            echo_spacing = J['VendorReportedEchoSpacing']
+        elif 'EffectiveEchoSpacing' in J:
+            echo_spacing = J['EffectiveEchoSpacing']
+        else:
+            echo_spacing = 0
+        if 'AcquisitionMatrixPE' in J:
+            matrix_pe = J['AcquisitionMatrixPE']
+        elif 'ReconMatrixPE' in J:
+            matrix_pe = J['ReconMatrixPE']
+        else:
+            matrix_pe = 0
+        if 'ParallelReductionFactorInPlane' in J:
+            para_fac = J['ParallelReductionFactorInPlane']
+        else:
+            para_fac = 1
+        total_ro_time = echo_spacing * (matrix_pe/para_fac - 1)
+        if total_ro_time > 0:
+            J['TotalReadoutTime'] = total_ro_time
+            writejson(J, jsonfile)
 
 def md5file(filepath): # ======================================================
     with open(filepath, 'rb') as f:
@@ -485,10 +502,10 @@ if args.dirin != None:
     #    issues with studies "corrected" in the scanner console and re-exported 
     #    to the database, sometimes creating duplicates with different study names
     # 2) For BOLD scans, ensure TotalReadOutTime is present
-    print('Making small edits or additions to json files (not altering original files)')
     for nidb_id in D:
         for studynum in D[nidb_id]:
             for oldfnam in D[nidb_id][studynum].index.tolist():
+                print('Making small edits to copied JSON file: {}'.format(oldfnam))
                 studyincomments(os.path.join(curdir, '{}.json'.format(oldfnam)),
                                 D[nidb_id][studynum].loc[oldfnam,'studynam'])
                 if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'func':
