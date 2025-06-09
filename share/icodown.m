@@ -26,7 +26,7 @@ function icodown(varargin)
 % Anderson M. Winkler
 % Yale University / Institute of Living
 % Apr/2012 (first version)
-% May/2016 (this version, now with vertexwise and surfaces geometry)
+% Jun/2025 (this version)
 % http://brainder.org
 
 % Do OCTAVE stuff

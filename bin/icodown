@@ -27,7 +27,7 @@
 % Anderson M. Winkler
 % Yale University / Institute of Living
 % Apr/2012 (first version)
-% May/2016 (this version, now with vertexwise and surfaces geometry)
+% Jun/2025 (this version)
 % http://brainder.org
 
 % Do OCTAVE stuff
@@ -80,7 +80,7 @@ end
 filein  = varargin{1};
 ntarget = varargin{2};
 fileout = varargin{3};
-if ischar(ntarget),
+if ischar(ntarget)
     ntarget = eval(ntarget);
 end
 
@@ -89,10 +89,10 @@ V0 = 12;
 F0 = 20;
 
 % Read data from disk. Try first mgz/mgh, then dpx, then srf, then give up
-[fpth,fnam,fext] = fileparts(filein);
-if strcmpi(fext,'.mgz') || strcmpi(fext,'.mgh'),
+[~,~,fext] = fileparts(filein);
+if strcmpi(fext,'.mgz') || strcmpi(fext,'.mgh')
     fs_home = getenv('FREESURFER_HOME');
-    if ~ isempty('FREESURFER_HOME') && exist(fullfile(fs_home,'matlab'),'dir'),
+    if ~ isempty('FREESURFER_HOME') && exist(fullfile(fs_home,'matlab'),'dir')
         addpath(fullfile(fs_home,'matlab'));
         [dpx,extra.M,extra.mr_parms,extra.volsz] = load_mgh(filein);
         nX = size(dpx,1);
@@ -116,38 +116,44 @@ else
     end
 end
 
-switch ftype,
+switch ftype
     
-    case 'srf',
+    case 'srf'
         
-        % Find icosahedron order
+        % Identify icosahedron order
         n = round(log((nV-2)/(V0-2))/log(4));
         
         % Sanity check
-        if nV ~= 4^n*(V0-2)+2,
+        if nV ~= 4^n*(V0-2)+2
             error('Data not from icosahedron.');
-        elseif ntarget >= n,
-            error('This script only downsamples data.');
+        elseif ntarget >= n
+            error('This script only downsamples data (target order: %d / input order: %d).',ntarget,n);
         else
             fprintf('Downsampling surface geometry:');
         end
         
         % Remove vertices:
         vtx = vtx(1:(4^ntarget*(V0-2)+2),:);
-        
+
         % Remove face indices:
-        for j = (n-1):-1:ntarget,
+        for j = (n-1):-1:ntarget
             fprintf(' %d',j);
-            nVj    = 4^j*(V0-2)+2;
-            facnew = zeros(4^j*F0,3);
-            fout   = find(all(fac > nVj,2));
-            for f = 1:numel(fout),
-                vidx = fac(fout(f),:);
-                ftomerge = fac(sum(...
-                    fac == vidx(1) | ...
-                    fac == vidx(2) | ...
-                    fac == vidx(3),2) == 2,:);
-                facnew(f,:) = sum(ftomerge.*(ftomerge <= nVj),1);
+            nVj     = 4^j*(V0-2)+2;
+            nFj     = 4^j*F0;
+            nVjprev = 4^(j+1)*(V0-2)+2;
+            nFjprev = 4^(j+1)*F0;
+            remap   = 1:nVjprev;
+            for f = 1:nFjprev
+                v1 = fac(f,1);
+                v2 = fac(f,2);
+                v3 = fac(f,3);
+                remap(v1) = min(min(remap(v1),v2),v3);
+            end
+            facnew = zeros(nFj,3);
+            for f = 1:nFj
+                for v = 1:3
+                    facnew(f,v) = remap(fac(f,v));
+                end
             end
             fac = facnew;
         end
@@ -156,18 +162,18 @@ switch ftype,
         % Save to disk
         srfwrite(vtx,fac,fileout);
         
-    case {'dpx','mgh'},
+    case {'dpx','mgh'}
         
         % Detect what kind of data this is
-        if mod(nX,10),
+        if mod(nX,10)
             
             % Find icosahedron order
             n = round(log((nX-2)/(V0-2))/log(4));
             
             % Sanity check
-            if nX ~= 4^n*(V0-2)+2,
+            if nX ~= 4^n*(V0-2)+2
                 error('Data not from icosahedron.');
-            elseif ntarget >= n,
+            elseif ntarget >= n
                 error('This script only downsamples data.');
             else
                 fprintf('Downsampling vertexwise data.\n');
@@ -182,28 +188,28 @@ switch ftype,
             n = round(log(nX/F0)/log(4));
             
             % Sanity check
-            if nX ~= 4^n*F0,
+            if nX ~= 4^n*F0
                 error('Data not from icosahedron.');
-            elseif ntarget >= n,
+            elseif ntarget >= n
                 error('This script only downsamples data.')
             else
                 fprintf('Downsampling facewise data:');
             end
             
             % If a surface was given
-            if nargin == 4,
+            if nargin == 4
                 
                 % Load it
                 [~,fac] = srfread(filein);
                 
                 % Downsample faces (general case)
-                for j = (n-1):-1:ntarget,
+                for j = (n-1):-1:ntarget
                     fprintf(' %d',j);
                     nVj    = 4^j*(V0-2)+2;
                     facnew = zeros(4^j*F0,3);
                     fout   = find(all(fac > nVj,2));
                     dpfnew = dpf(fout,:,:,:);
-                    for f = 1:numel(fout),
+                    for f = 1:numel(fout)
                         vidx = fac(fout(f),:);
                         fidx = sum(...
                             fac == vidx(1) | ...
@@ -219,11 +225,11 @@ switch ftype,
                 
             else
                 % Downsample faces (platonic only)
-                for d = 1:(n-ntarget),
+                for d = 1:(n-ntarget)
                     siz = size(dpx);
                     siz(1) = siz(1)/4;
                     dpxnew = zeros(siz);
-                    for n = 1:size(dpx,4);
+                    for n = 1:size(dpx,4)
                         dpxnew(:,1,1,n) = sum(reshape(dpx(:,1,1,n),[4 nX/4]))';
                     end
                 end
@@ -231,7 +237,7 @@ switch ftype,
         end
         
         % Save to disk
-        if strcmpi(ftype,'mgh'),
+        if strcmpi(ftype,'mgh')
             save_mgh(dpx,fileout,extra.M,extra.mr_parms);
         else
             nXdown = size(dpx,1);
