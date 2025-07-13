@@ -137,7 +137,6 @@ switch ftype
         % Remove face indices:
         for j = (n-1):-1:ntarget
             fprintf(' %d',j);
-            nVj     = 4^j*(V0-2)+2;
             nFj     = 4^j*F0;
             nVjprev = 4^(j+1)*(V0-2)+2;
             nFjprev = 4^(j+1)*F0;
@@ -207,7 +206,7 @@ switch ftype
                     nVj    = 4^j*(V0-2)+2;
                     facnew = zeros(4^j*F0,3);
                     fout   = find(all(fac > nVj,2));
-                    dpfnew = dpf(fout,:,:,:);
+                    dpfnew = dpx(fout,:,:,:);
                     for f = 1:numel(fout)
                         vidx = fac(fout(f),:);
                         fidx = sum(...
