@@ -37,7 +37,7 @@ def printHelp(argv, description): # ===========================================
     print("Anderson M. Winkler")
     print("UTRGV")
     print("First version: Sep/2020")
-    print("This version:  May/2025")
+    print("This version:  Sep/2025")
     print("http://brainder.org")
     exit(1)
     
@@ -508,7 +508,7 @@ if args.dirin != None:
                 print('Making small edits to copied JSON file: {}'.format(oldfnam))
                 studyincomments(os.path.join(curdir, '{}.json'.format(oldfnam)),
                                 D[nidb_id][studynum].loc[oldfnam,'studynam'])
-                if D[nidb_id][studynum].loc[oldfnam,'datatype'] == 'func':
+                if D[nidb_id][studynum].loc[oldfnam,'datatype'] in ['func', 'dwi']:
                     addtotalreadouttime(os.path.join(curdir, '{}.json'.format(oldfnam)))
     
     # Compute the hashes for the image files with duplicate names, to find duplicate images
