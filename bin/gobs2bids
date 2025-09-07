@@ -19,6 +19,7 @@ import re
 import hashlib
 import string
 import random
+import math
 
 def printHelp(argv, description): # ===========================================
 
@@ -156,14 +157,21 @@ def addtotalreadouttime(jsonfile): # ==========================================
             echo_spacing = J['VendorReportedEchoSpacing']
         elif 'EffectiveEchoSpacing' in J:
             echo_spacing = J['EffectiveEchoSpacing']
+        elif 'PixelBandwidth' in J:
+            echo_spacing = 1/J['PixelBandwidth']
         else:
             echo_spacing = 0
-        if 'AcquisitionMatrixPE' in J:
-            matrix_pe = J['AcquisitionMatrixPE']
-        elif 'ReconMatrixPE' in J:
-            matrix_pe = J['ReconMatrixPE']
+        if 'PhaseEncodingSteps' in J:
+            matrix_pe = J['PhaseEncodingSteps']
         else:
-            matrix_pe = 0
+           if 'AcquisitionMatrixPE' in J:
+               matrix_pe = J['AcquisitionMatrixPE']
+           elif 'ReconMatrixPE' in J:
+               matrix_pe = J['ReconMatrixPE']
+           else:
+               matrix_pe = 0
+           if 'PartialFourier' in J:
+               matrix_pe = math.ceil(J['PartialFourier'] * matrix_pe)
         if 'ParallelReductionFactorInPlane' in J:
             para_fac = J['ParallelReductionFactorInPlane']
         else:
@@ -501,7 +509,7 @@ if args.dirin != None:
     # 1) Ensure that studynam is correct in the json file. This helps to solve 
     #    issues with studies "corrected" in the scanner console and re-exported 
     #    to the database, sometimes creating duplicates with different study names
-    # 2) For BOLD scans, ensure TotalReadOutTime is present
+    # 2) For BOLD & DWI scans, ensure TotalReadOutTime is present
     for nidb_id in D:
         for studynum in D[nidb_id]:
             for oldfnam in D[nidb_id][studynum].index.tolist():
