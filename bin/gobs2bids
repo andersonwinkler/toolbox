@@ -59,6 +59,8 @@ def parseArguments(argv): # ===================================================
                             dest='ses2sub', action='store_true', required=False)
         parser.add_argument('-r', '--renumber', help="Re-number sessions, runs and echos to 1, 2, etc...",
                             dest='renumber', action='store_true', required=False)
+        parser.add_argument('-i', '--replaceids', help="Rename subject IDs based on the provided CSV (fields 'UID' -> 'AltUID')",
+                            dest='replaceids', type=str, required=False, default=None)
         args = parser.parse_args(argv[1:])
         return args
 
@@ -195,8 +197,6 @@ def random_string(k=10): # ====================================================
 # =============================================================================
 
 # Parse arguments
-#argv = './gobs2bids.py -n dups_nidb -b dups_bids'.split(' ')
-#args = parseArguments(argv)
 args = parseArguments(sys.argv)
 
 # Note that dirin (-n nidbdir) is optional. If not supplied, and if the BIDS
@@ -474,7 +474,7 @@ if args.dirin != None:
                     modstr     = '_dwi'
                     taskstr    = ''
                     multi_echo = False
-                    B0_source  = None
+                    B0_source  = 'fieldmapping'
                     
                 elif 'diffmb32mmb700064' == series_description or \
                      'diffmb12mmb700064' == series_description: # -------------
@@ -594,11 +594,11 @@ if args.dirin != None:
                     print('Adding B0FieldIdentifier and IntendedFor to: {}'.format('{}.json'.format(oldfnam)))
                     idx = D[nidb_id][studynum][~idxdup].loc[:,'B0_source'] == D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_identifier']
                     intendedfor = []
-                    for newfnam in D[nidb_id][studynum][~idxdup].loc[idx,'newfnam']:
-                        bids_path = os.path.join(newfnam.split('_')[0],
-                                                 'ses-{}'.format(D[nidb_id][studynum][~idxdup].loc[oldfnam,'acquisition_date']), 
-                                                 D[nidb_id][studynum][~idxdup].loc[oldfnam,'datatype'], 
-                                                 '{}.nii.gz'.format(newfnam))
+                    for iidx in D[nidb_id][studynum][~idxdup].loc[idx,:].index:
+                        bids_path = os.path.join(D[nidb_id][studynum][~idxdup].loc[iidx,'newfnam'].split('_')[0],
+                                                 'ses-{}'.format(D[nidb_id][studynum][~idxdup].loc[iidx,'acquisition_date']), 
+                                                 D[nidb_id][studynum][~idxdup].loc[iidx,'datatype'], 
+                                                 '{}.nii.gz'.format(D[nidb_id][studynum][~idxdup].loc[iidx,'newfnam']))
                         intendedfor.append('bids::{}'.format(bids_path))
                     intendedfor.sort()
                     J = readjson(os.path.join(curdir, '{}.json'.format(oldfnam)))
@@ -606,7 +606,7 @@ if args.dirin != None:
                         J['IntendedFor']   = J['IntendedFor'] + intendedfor
                     else:
                         J['IntendedFor']   = intendedfor
-                    J['IntendedFor']       = list(set(J['IntendedFor']))
+                    J['IntendedFor']       = sorted(list(set(J['IntendedFor'])))
                     J['B0FieldIdentifier'] = D[nidb_id][studynum][~idxdup].loc[oldfnam,'B0_identifier']
                     writejson(J, os.path.join(curdir, '{}.json'.format(oldfnam)))
                     
@@ -642,6 +642,11 @@ if args.dirin != None:
                             print('Renaming: {} -> {}'.format(oldfile, newfile))
                             os.rename(oldfile, newfile)
 
+# Write dataset_description.json
+J = { 'Name':'GOBS',
+      'BIDSVersion': '1.0.0'}
+writejson(J, os.path.join(args.dirout,'dataset_description.json'))
+
 # Renumber ses, run, echo, to 1, 2, 3, etc.
 # This part will only run if the "-r" option is given
 if args.renumber:
@@ -658,16 +663,17 @@ if args.renumber:
             for curdir, subdirs, files in os.walk(args.dirout):
                 for f in sorted(files):
                     if curdir.endswith('fmap') and f.endswith('.json'):
-                        funcdir = os.path.join(os.path.split(curdir)[0], 'func')
-                        J = readjson(os.path.join(curdir, f))
-                        if 'IntendedFor' in J:
-                            for iidx, inam in enumerate(J['IntendedFor']):
-                                ifdir, ifnam = os.path.split(inam)
-                                ofnam = os.path.join(funcdir, ifnam)
-                                if ofnam in oldlist:
-                                    oidx = oldlist.index(ofnam)
-                                    J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
-                            writejson(J, os.path.join(curdir, f))
+                        for ff in ['func', 'dwi']:
+                            intfordir = os.path.join(os.path.split(curdir)[0], ff)
+                            J = readjson(os.path.join(curdir, f))
+                            if 'IntendedFor' in J:
+                                for iidx, inam in enumerate(J['IntendedFor']):
+                                    ifdir, ifnam = os.path.split(inam)
+                                    ofnam = os.path.join(intfordir, ifnam)
+                                    if ofnam in oldlist:
+                                        oidx = oldlist.index(ofnam)
+                                        J['IntendedFor'][iidx] = os.path.join(ifdir, os.path.split(newlist[oidx])[-1])
+                                writejson(J, os.path.join(curdir, f))
             for i in range(0, len(oldlist)):
                 print('Renaming: {} -> {}'.format(oldlist[i],  newlist[i]))
                 os.rename(oldlist[i], newlist[i])
@@ -728,9 +734,79 @@ if args.renumber:
         print('Error: BIDS directory does not exist: {}'.format(args.dirout))
         sys.exit(1)
 
-# Write dataset_description.json
-J = { 'Name':'GOBS',
-      'BIDSVersion': '1.0.0'}
-writejson(J, os.path.join(args.dirout,'dataset_description.json'))
+# This part will only run if IDs are replaced from NiDB ID to SOLAR ID
+if not args.replaceids is None:        
+    if os.path.isdir(args.dirout):
+        if os.path.exists(args.replaceids):
+            
+            # Load table with IDs. NiDB ID is "UID". SOLAR ID is "AltUID".
+            IDlist = pd.read_csv(args.replaceids)
+            IDlist = IDlist[['UID', 'AltUID']].drop_duplicates()
+            IDlist = IDlist.set_index('UID', drop=True)
+            
+            # Rename subjects
+            # Deal with the directories sub-* first
+            olddirs = []
+            newdirs = []
+            for olditem in os.listdir(args.dirout):
+                if os.path.isdir(os.path.join(args.dirout, olditem)):
+                    olddir = os.path.join(args.dirout, olditem)
+                    if olditem.startswith('sub-'):
+                        uid    = olditem.removeprefix('sub-')
+                        altuid = IDlist.loc[uid,'AltUID']
+                        newitem = 'sub-{}'.format(altuid)
+                        newdir = os.path.join(args.dirout, newitem)
+                        if newdir != olddir:
+                            olddirs.append(olddir)
+                            newdirs.append(newdir)
+            for i in range(0, len(olddirs)):
+                print('Renaming: {} -> {}'.format(olddirs[i], newdirs[i]))
+                os.rename(olddirs[i], newdirs[i])
+            # Then deal with the files
+            oldlist = []
+            newlist = []
+            for curdir, subdirs, files in os.walk(args.dirout):
+                dtok = curdir.split('/')
+                for idxt, t in enumerate(dtok):
+                    if t.startswith('sub-'):
+                        substr = t
+                for f in sorted(files):
+                    ftok = f.split('_')
+                    for idxt, t in enumerate(ftok):
+                        if t.startswith('sub-'):
+                            ftok[idxt] = substr
+                    oldfile = os.path.join(curdir, f)
+                    newfile = os.path.join(curdir, '_'.join(ftok))
+                    if newfile != oldfile:
+                        oldlist.append(oldfile)
+                        newlist.append(newfile)
+                        print('Renaming: {} -> {}'.format(oldfile, newfile))
+                        os.rename(oldfile, newfile)
+            # Now rename the 'IntendFor' inside the .json
+            for curdir, subdirs, files in os.walk(args.dirout):
+                for f in (files):
+                    if curdir.endswith('fmap') and f.endswith('.json'):
+                        dtok = curdir.split('/')
+                        for idxt, t in enumerate(dtok):
+                            if t.startswith('sub-'):
+                                newsubstr = t
+                        J = readjson(os.path.join(curdir, f))
+                        if 'IntendedFor' in J:
+                            for iidx, inam in enumerate(J['IntendedFor']):
+                                ifdir, ifnam = os.path.split(inam)
+                                ftok = ifnam.split('_')
+                                for idxt, t in enumerate(ftok):
+                                    if t.startswith('sub-'):
+                                        oldsubstr = t
+                                J['IntendedFor'][iidx] = J['IntendedFor'][iidx].replace(oldsubstr, newsubstr)
+                        writejson(J, os.path.join(curdir, f))
+            
+        else:
+            print('Error: File does not exist: {}'.format(args.replaceids))
+            sys.exit(1)
+    else:
+        print('Error: BIDS directory does not exist: {}'.format(args.dirout))
+        sys.exit(1)
+
 print('Finished.')
 sys.exit(0)
