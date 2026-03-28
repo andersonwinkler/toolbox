@@ -858,6 +858,10 @@ def plot_directions(vectors, shells=None, bvalues=None,
         bvalues1  = shells / shells.max() # fake b-values, and scaled to between 0 and 1
         if not reproject:
             vectors = vectors * shells/shells.max()
+    elif shells is None and bvalues is None:
+        shells   = np.ones(vectors.shape[0])
+        bmax     = None
+        bvalues1 = np.ones(vectors.shape[0])
     else:
         raise ValueError('Must provide either "shells" or "bvalues", not both')
     uB1 = np.unique(bvalues1)
