@@ -57,7 +57,7 @@ do
 done
 
 # Prepare a random string to save temporary files
-RND0=$(echo "$(date) ${IN} ${THR}" | md5 )
+RND0=$(echo "$(date +%N) $$ $RANDOM" | md5sum )
 RNDSTR=${RND0:0:12}
 
 # Define a function for Ctrl+C as soon as the RNDSTR is defined
@@ -80,11 +80,14 @@ if [ $(echo ${IMG_LIST}| wc -w) -eq 1 ] ; then
    exit 0
 fi
 
+# Get the directory where the final output is going
+OUT_DIR=$(dirname "${OUTPUT}")
+
 # Linear alignment to the target
 mclist=""
 for i in ${IMG_LIST} ; do
    echo "Aligning image ${i}"
-   o=$(imglob ${i})_tmp_${RNDSTR}
+   o=${OUT_DIR}/$(basename $(${FSLDIR}/bin/imglob ${i})_tmp_${RNDSTR})
    mclist="${mclist} ${o}"
    ${FSLDIR}/bin/flirt -in ${i} -ref ${TARGET} -out ${o} -omat ${o}.mat -dof 6 -interp sinc
 done
@@ -101,11 +104,11 @@ ${FSLDIR}/bin/fslmaths ${tmp4dfile} -Tmean ${OUTPUT}
 # Either rename or get rid of the .mat files
 if [ ${KEEPMAT} == "1" ] ; then
    for i in ${IMG_LIST} ; do
-      o=$(${FSLDIR}/bin/imglob ${i})_tmp_${RNDSTR}
+      o=${OUT_DIR}/$(basename $(${FSLDIR}/bin/imglob ${i})_tmp_${RNDSTR})
       mv ${o}.mat ${i}.mat
    done
 else
-   rm -f ${o}.mat
+   rm -f ${OUT_DIR}/*_tmp_${RNDSTR}.mat
 fi
 
 # Delete temp files
