@@ -41,10 +41,6 @@ if numel(mod) > 0 && size(mod,1) ~= N
 end
 nD = size(dat,2);
 
-% Remove constant columns from the data
-icte_y = ~ sum(diff(dat,1,1).^2,1);
-dat(:,icte_y) = [];
-
 % Create regressors for the batches and design matrix
 levels    = unique(batch);
 n_batch   = numel(levels);
@@ -56,7 +52,8 @@ fprintf('[combat] Found %d batches\n', n_batch);
 batchmod  = double(batch == levels');
 n_batches = sum(batchmod);
 if isempty(mod)
-    mod_mean = [];
+    mod      = zeros(N,0);
+    mod_mean = zeros(1,0);
 else
     mod_mean = mean(mod,1);
     mod      = mod - mod_mean;
@@ -79,6 +76,9 @@ B_hat = pinv(design)*dat;
 grand_mean = n_batches*B_hat(1:n_batch,:)/N;
 var_pooled = sum((dat-design*B_hat).^2,1)/N;
 idx = var_pooled == 0;
+if all(idx)
+    error('All features have zero pooled variance.');
+end
 var_pooled(idx) = median(var_pooled(~idx));
 stand_mean = grand_mean + mod*B_hat(n_batch+1:end,:);
 s_data = (dat-stand_mean)./sqrt(var_pooled);

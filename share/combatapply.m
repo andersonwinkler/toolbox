@@ -23,29 +23,34 @@ function bayesdata = combatapply(dat,batch,mod,batch0,grand_mean,B_hat,var_poole
 % Jun/2023
 % http://brainder.org
 
-levels0   = unique(batch0);
-levels    = unique(batch);
-shared    = intersect(levels,levels0);
-if numel(levels) ~= numel(shared) || any(levels ~= shared)
-    error('Some batches were not present in the original run of ComBat');
+if numel(batch) == max(size(batch))
+    batch = batch(:);
+else
+    error('"batch" must be a vector.')
 end
+levels0   = unique(batch0);
 n_batch   = numel(levels0);
+if any(~ismember(batch, levels0(:)))
+    warning(['Some batches were not present in the original run of ComBat. ' ...
+             'Those rows will be left unadjusted.']);
+end
 bidx      = cell(n_batch,1);
 for b = 1:n_batch
     bidx{b} = batch == levels0(b);
 end
-if ~isempty(mod)
-    if numel(mod_mean) ~= size(mod,2)
-        error('mod_mean must have as many columns as mod.');
-    end
+if isempty(mod)
+    mod = zeros(size(dat,1),0);
+elseif numel(mod_mean) ~= size(mod,2)
+    error('mod_mean must have as many columns as mod.');
+else
     mod = mod - mod_mean;
 end
 stand_mean = grand_mean + mod*B_hat(n_batch+1:end,:);
 s_data     = (dat-stand_mean)./sqrt(var_pooled);
-bayesdata  = zeros(size(s_data));
+bayesdata  = s_data;
 for b = 1:n_batch
-    if ~ isempty(bidx{b})
-        idx = bidx{b};
+    idx = bidx{b};
+    if any(idx)
         bayesdata(idx,:) = (s_data(idx,:)-gamma_star(b,:))./sqrt(delta_star(b,:));
     end
 end
