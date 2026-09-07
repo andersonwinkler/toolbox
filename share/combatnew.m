@@ -1,4 +1,4 @@
-function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star] = combatnew(dat,batch,mod,parametric)
+function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star,mod_mean] = combatnew(dat,batch,mod,parametric)
 % This is an edit of the original combat.m such that the
 % harmonization parameters are produced.
 % Other edits make the parametric adjustment much faster for large
@@ -50,12 +50,17 @@ levels    = unique(batch);
 n_batch   = numel(levels);
 bidx      = cell(n_batch,1);
 for b = 1:n_batch
-    bidx{b} = batch == b;
+    bidx{b} = batch == levels(b);
 end
 fprintf('[combat] Found %d batches\n', n_batch);
 batchmod  = double(batch == levels');
 n_batches = sum(batchmod);
-mod       = mod-mean(mod);
+if isempty(mod)
+    mod_mean = [];
+else
+    mod_mean = mean(mod,1);
+    mod      = mod - mod_mean;
+end
 design    = [batchmod mod];
 n_cov     = size(mod,2);
 

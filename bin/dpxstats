@@ -1,4 +1,4 @@
-#!/usr/bin/octave-cli --no-window-system
+#!/opt/local/bin/octave --no-window-system
 % function dpxstats(varargin)
 % Display some statistics for a DPF or DPV file.
 %
