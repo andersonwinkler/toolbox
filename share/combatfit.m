@@ -1,25 +1,69 @@
-function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star,mod_mean] = combatnew(dat,batch,mod,parametric)
-% This is an edit of the original combat.m such that the
-% harmonization parameters are produced.
-% Other edits make the parametric adjustment much faster for large
-% datasets. The results should be identical to the original combat.m
-% 
+function [bayesdata,grand_mean,B_hat,var_pooled,gamma_star,delta_star,mod_mean] = combatfit(dat,batch,mod,parametric)
+% Fit ComBat and return the harmonization parameters.
+%
+% Usage:
+% [bayesdata,grand_mean, ...
+%              B_hat,var_pooled,gamma_star,delta_star,mod_mean] = ...
+%              combatfit(dat,batch,mod,parametric)
+%
+% Inputs:
+% dat        : Data to harmonize, N by P (samples by features).
+%              This is the transpose of the original combat.m
+%              convention (features by samples).
+% batch      : Vector of length N with scanner/site/batch labels.
+% mod        : N by Q matrix of biological covariates to protect
+%              (age, sex, diagnosis, etc.). Do not include an
+%              intercept; batch dummies already span one. Use
+%              [] if there are no covariates.
+% parametric : True for parametric empirical Bayes, false for
+%              the non-parametric prior.
+%
+% Outputs:
+% bayesdata  : Harmonized training data (N by P).
+% grand_mean : Sample-size-weighted mean of batch intercepts
+%              (1 by P). This is the intercept at mean covariate
+%              values; covariates are centered internally.
+% B_hat      : OLS coefficients, (nBatch+Q) by P. First nBatch
+%              rows are batch dummies, then centered covariates.
+% var_pooled : Pooled residual variances (1 by P). Zero variances
+%              are replaced by the median of the nonzero values.
+% gamma_star : Empirical-Bayes batch location shifts, nBatch by P.
+%              Rows follow unique(batch) (sorted).
+% delta_star : Empirical-Bayes batch scale factors, nBatch by P.
+%              Rows follow unique(batch) (sorted).
+% mod_mean   : Column means of mod (1 by Q), empty if mod is empty.
+%
+% Notes:
+% * This is an edit of the original combat.m such that the
+%   harmonization parameters are produced. Other edits make the
+%   parametric adjustment faster for large datasets. The
+%   results should be identical to the original combat.m
+%
+% * Use combatapply to apply the returned parameters to a
+%   held-out test set (for example in cross-validation),
+%   without re-estimating batch effects from the test data.
+%
+% * Pass the last six outputs, plus the training batch, to
+%   combatapply:
+%   [yc,gm,Bh,vp,gs,ds,mm] = combatfit(yTrain,batchTrain,modTrain,true);
+%   yTestH = combatapply(yTest,batchTest,modTest,batchTrain,gm,Bh,vp,gs,ds,mm);
+%
 % The original ComBat can be found at https://github.com/Jfortin1/ComBatHarmonization
-% 
+%
 % For information, see and cite:
-% * Johnson WE, Li C, Rabinovic A. Adjusting batch effects in microarray 
+% * Johnson WE, Li C, Rabinovic A. Adjusting batch effects in microarray
 %   expression data using empirical Bayes methods.
 %   Biostatistics. 2007 Jan;8(1):118-27.
 % * Fortin JP, Parker D, Tun? B, Watanabe T, Elliott MA, Ruparel K,
-%   Roalf DR, Satterthwaite TD, Gur RC, Gur RE, Schultz RT, Verma R, 
+%   Roalf DR, Satterthwaite TD, Gur RC, Gur RE, Schultz RT, Verma R,
 %   Shinohara RT. Harmonization of multi-site diffusion tensor imaging
 %   data. Neuroimage. 2017 Nov 1;161:149-170.
-% * Fortin JP, Cullen N, Sheline YI, Taylor WD, Aselcioglu I, Cook PA, 
-%   Adams P, Cooper C, Fava M, McGrath PJ, McInnis M, Phillips ML, 
-%   Trivedi MH, Weissman MM, Shinohara RT. Harmonization of cortical 
+% * Fortin JP, Cullen N, Sheline YI, Taylor WD, Aselcioglu I, Cook PA,
+%   Adams P, Cooper C, Fava M, McGrath PJ, McInnis M, Phillips ML,
+%   Trivedi MH, Weissman MM, Shinohara RT. Harmonization of cortical
 %   thickness measurements across scanners and sites.
 %   Neuroimage. 2018 Feb 15;167:104-120.
-% 
+%
 % _____________________________________
 % Anderson M. Winkler
 % UTRGV
