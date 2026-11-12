@@ -3,9 +3,9 @@
 if [ -z "$1" ]; then
 cat <<EOU
 Run BET with bias correction or, if a 2nd argument is given,
-uses an FS-derived mask.
+uses an FS-derived mask or FreeSurfer's mri_synthseg.
 
-Usage: betty <brain image> [processed subject's FS dir]
+Usage: betty <brain image> [processed subject's FS dir | mri_synthseg]
 
 This script requires FSL properly installed and configured.
 If a 2nd argument is given, requires also FreeSurfer.
@@ -31,6 +31,14 @@ if [[ "${2}" == "" ]] ; then
    ${FSLDIR}/bin/imrm ${in}_braintmp
    ${FSLDIR}/bin/imrm ${in}_braintmp_bias
    ${FSLDIR}/bin/imrm ${in}_braintmp_seg
+
+elif [[ "${2}" == "mri_synthseg" ]] ; then
+
+   # Don't run BET. Instead, use FreeSurfer's mri_synthseg to mask the input
+   ${FREESURFER_HOME}/bin/mri_synthseg --i ${1} --o ${in}_synthsegtmp.nii.gz
+   ${FSLDIR}/bin/flirt -in ${in}_synthsegtmp -ref ${in} -applyxfm -usesqform -interp nearestneighbour -out ${in}_synthseg2intmp
+   ${FSLDIR}/bin/fslmaths ${in}_synthseg2intmp -bin -mul ${in} ${in}_brain
+   ${FSLDIR}/bin/imrm ${in}_synthsegtmp ${in}_synthseg2intmp
 
 else
 

@@ -33,6 +33,7 @@ def printHelp(argv, description): # ===========================================
     print("-b : Output BIDS directory.")
     print("-r : Renumber entities as 1, 2, 3, etc.")
     print("-s : Use study name as subject name.")
+    print("-i : CSV with UID and AltUID columns to rename subject IDs.")
     print("")
     print("_____________________________________")
     print("Anderson M. Winkler")
@@ -123,15 +124,22 @@ def cleanentity(curdir, f, entity='run'): # ==================================
     for idxt, t in enumerate(ftok):
         if t.startswith('{}-'.format(entity)):
             ftok[idxt] = '{}-*'.format(entity)
-    flist = glob.glob(os.path.join(curdir, '_'.join(ftok) + fext))
+    flist = glob.glob(os.path.join(curdir, '_'.join(ftok) + ('*' if fext == '' else '.*')))
     flist.sort()
-    if isinstance(flist, list):
-        if len(flist) == 1 and entity != 'ses': # note the exception for ses, as we always need a ses-1
+    slist = []
+    for g in flist:
+        gnam, gext = os.path.splitext(os.path.basename(g))
+        if gext == '.gz':
+            gnam, gext = os.path.splitext(gnam)
+        if gnam not in slist:
+            slist.append(gnam)
+    if isinstance(slist, list):
+        if len(slist) == 1 and entity != 'ses': # note the exception for ses, as we always need a ses-1
             for idxt, t in enumerate(ftok):
                 if t.startswith('{}-'.format(entity)):
                     ftok.pop(idxt)
         else:
-            idxf = flist.index(os.path.join(curdir, fnam + fext)) + 1
+            idxf = slist.index(fnam) + 1
             for idxt, t in enumerate(ftok):
                 if t.startswith('{}-'.format(entity)):
                     ftok[idxt] = '{}-{}'.format(entity, idxf)
